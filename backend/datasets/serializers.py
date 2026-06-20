@@ -48,3 +48,14 @@ class TransformationPreviewRequestSerializer(serializers.Serializer):
 
     def validate_columns(self, value: list[str]) -> list[str]:
         return list(dict.fromkeys(value))
+
+
+class RegexGenerationRequestSerializer(serializers.Serializer):
+    instruction = serializers.CharField(max_length=1_000)
+    columns = serializers.ListField(
+        child=serializers.CharField(),
+        allow_empty=False,
+    )
+
+    def validate_columns(self, value: list[str]) -> list[str]:
+        return list(dict.fromkeys(value))

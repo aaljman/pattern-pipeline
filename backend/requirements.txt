@@ -3,6 +3,7 @@ djangorestframework>=3.16,<4
 django-cors-headers>=4.7,<5
 pandas>=3.0,<3.1
 openpyxl>=3.1,<4
+openai>=2.0,<3
 pydantic>=2.12,<3
 regex>=2025.11,<2027
 whitenoise>=6.9,<7
