@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { uploadDataset } from "./api/datasets";
 import { DatasetProfile } from "./components/DatasetProfile";
 import { FileDropzone } from "./components/FileDropzone";
+import { TransformationStudio } from "./components/TransformationStudio";
 
 const stages = ["Upload", "Transform", "Review", "Export"];
 
@@ -43,7 +44,10 @@ export function App() {
 
       <section className="workspace">
         {upload.data ? (
-          <DatasetProfile dataset={upload.data} onReplace={() => upload.reset()} />
+          <>
+            <DatasetProfile dataset={upload.data} onReplace={() => upload.reset()} />
+            <TransformationStudio dataset={upload.data} />
+          </>
         ) : (
           <FileDropzone
             error={upload.error?.message}

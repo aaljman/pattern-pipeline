@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { requestJson } from "./client";
+
 const columnSchema = z.object({
   name: z.string(),
   type: z.enum(["text", "number", "boolean", "datetime"]),
@@ -22,45 +24,12 @@ const datasetSchema = z.object({
   created_at: z.string()
 });
 
-const errorSchema = z.object({
-  code: z.string(),
-  message: z.string()
-});
-
 export type Dataset = z.infer<typeof datasetSchema>;
 export type DatasetColumn = z.infer<typeof columnSchema>;
-
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    readonly code = "request_failed"
-  ) {
-    super(message);
-    this.name = "ApiError";
-  }
-}
 
 export async function uploadDataset(file: File): Promise<Dataset> {
   const body = new FormData();
   body.append("file", file);
 
-  const response = await fetch("/api/datasets/", {
-    method: "POST",
-    body
-  });
-  const payload: unknown = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const parsedError = errorSchema.safeParse(payload);
-    throw new ApiError(
-      parsedError.success ? parsedError.data.message : "The upload could not be completed.",
-      parsedError.success ? parsedError.data.code : undefined
-    );
-  }
-
-  const parsedDataset = datasetSchema.safeParse(payload);
-  if (!parsedDataset.success) {
-    throw new ApiError("The server returned an unexpected dataset profile.");
-  }
-  return parsedDataset.data;
+  return requestJson("/api/datasets/", { method: "POST", body }, datasetSchema);
 }
