@@ -1,6 +1,15 @@
+import { useMutation } from "@tanstack/react-query";
+
+import { uploadDataset } from "./api/datasets";
+import { DatasetProfile } from "./components/DatasetProfile";
+import { FileDropzone } from "./components/FileDropzone";
+
 const stages = ["Upload", "Transform", "Review", "Export"];
 
 export function App() {
+  const upload = useMutation({ mutationFn: uploadDataset });
+  const activeStage = upload.data ? 1 : 0;
+
   return (
     <main className="shell">
       <header className="masthead">
@@ -22,7 +31,10 @@ export function App() {
 
       <ol className="pipeline" aria-label="Transformation progress">
         {stages.map((stage, index) => (
-          <li className={index === 0 ? "active" : ""} key={stage}>
+          <li
+            className={index === activeStage ? "active" : index < activeStage ? "complete" : ""}
+            key={stage}
+          >
             <span>{index + 1}</span>
             {stage}
           </li>
@@ -30,13 +42,15 @@ export function App() {
       </ol>
 
       <section className="workspace">
-        <div className="drop-zone">
-          <span className="drop-icon" aria-hidden="true">+</span>
-          <h2>Start with a dataset</h2>
-          <p>Drop a CSV or XLSX file here, or choose one from your device.</p>
-          <button type="button">Choose file</button>
-          <small>Files are private and automatically expire.</small>
-        </div>
+        {upload.data ? (
+          <DatasetProfile dataset={upload.data} onReplace={() => upload.reset()} />
+        ) : (
+          <FileDropzone
+            error={upload.error?.message}
+            isUploading={upload.isPending}
+            onSelect={(file) => upload.mutate(file)}
+          />
+        )}
       </section>
     </main>
   );
