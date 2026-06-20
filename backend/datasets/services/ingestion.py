@@ -80,13 +80,7 @@ def hash_file(upload: UploadedFile) -> str:
 
 
 def parse_dataset(upload: BinaryIO, file_format: str) -> ParsedDataset:
-    if file_format == Dataset.Format.CSV:
-        frame = pd.read_csv(upload)
-        sheet_name = ""
-    else:
-        workbook = pd.ExcelFile(upload, engine="openpyxl")
-        sheet_name = workbook.sheet_names[0]
-        frame = workbook.parse(sheet_name)
+    frame, sheet_name = read_dataframe(upload, file_format)
 
     if not len(frame.columns):
         raise DatasetValidationError("The file does not contain any columns.")
@@ -99,6 +93,19 @@ def parse_dataset(upload: BinaryIO, file_format: str) -> ParsedDataset:
         columns=columns,
         preview=serialise_preview(frame.head(PREVIEW_ROWS)),
     )
+
+
+def read_dataframe(
+    source: BinaryIO,
+    file_format: str,
+    sheet_name: str = "",
+) -> tuple[pd.DataFrame, str]:
+    if file_format == Dataset.Format.CSV:
+        return pd.read_csv(source), ""
+
+    workbook = pd.ExcelFile(source, engine="openpyxl")
+    selected_sheet = sheet_name or workbook.sheet_names[0]
+    return workbook.parse(selected_sheet), selected_sheet
 
 
 def profile_column(frame: pd.DataFrame, name: str) -> dict:
