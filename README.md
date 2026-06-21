@@ -143,8 +143,9 @@ built-in plans remain available if it is omitted.
 - Regex length, cell length, supported flags, nested repetition, empty matches,
   and per-cell execution time are bounded.
 - Spreadsheet values beginning with `=`, `+`, `-`, or `@` are escaped on export.
-- Files expire logically after one hour. A production cleanup worker should remove
-  expired database rows and artifacts on a schedule.
+- Files expire after one hour. Schedule
+  `python backend/manage.py purge_expired_datasets` hourly to remove expired rows
+  and artifacts; add `--dry-run` to inspect the next cleanup safely.
 - XLSX processing currently operates on the first sheet and exports processed
   tabular data rather than preserving workbook formatting or formulas.
 - Authentication and multi-user project isolation are intentionally outside this
