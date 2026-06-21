@@ -39,6 +39,7 @@ export function FileDropzone({ error, isUploading, onSelect }: FileDropzoneProps
         ref={inputRef}
         className="visually-hidden"
         type="file"
+        aria-label="Upload CSV or XLSX file"
         accept={acceptedExtensions.join(",")}
         disabled={isUploading}
         onChange={(event) => {
@@ -60,7 +61,7 @@ export function FileDropzone({ error, isUploading, onSelect }: FileDropzoneProps
       >
         {isUploading ? "Uploading..." : "Choose file"}
       </button>
-      <small>Maximum 20 MB. Files automatically expire after one hour.</small>
+      <small>Maximum 20 MB. Access expires after one hour.</small>
       {error ? <p className="inline-error" role="alert">{error}</p> : null}
     </div>
   );

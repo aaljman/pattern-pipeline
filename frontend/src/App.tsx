@@ -43,6 +43,7 @@ export function App() {
       <ol className="pipeline" aria-label="Transformation progress">
         {stages.map((stage, index) => (
           <li
+            aria-current={index === activeStage ? "step" : undefined}
             className={index === activeStage ? "active" : index < activeStage ? "complete" : ""}
             key={stage}
           >

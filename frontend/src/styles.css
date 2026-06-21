@@ -528,8 +528,11 @@ tbody tr:last-child td {
   resize: vertical;
 }
 
-.field-label textarea:focus,
-.field-label input:focus {
+.field-label textarea:focus-visible,
+.field-label input:focus-visible,
+.field-label select:focus-visible {
+  outline: 2px solid rgba(87, 210, 216, 0.65);
+  outline-offset: 2px;
   border-color: rgba(87, 210, 216, 0.66);
   box-shadow: 0 0 0 3px rgba(87, 210, 216, 0.08);
 }
@@ -816,6 +819,16 @@ tbody tr:last-child td {
 .run-receipt {
   border-color: rgba(134, 235, 201, 0.24);
   background: linear-gradient(100deg, rgba(22, 105, 78, 0.18), rgba(12, 28, 44, 0.8));
+}
+
+.completed-output,
+.processed-output {
+  display: grid;
+  gap: 16px;
+}
+
+.processed-output {
+  margin-top: 16px;
 }
 
 .run-receipt h3 {

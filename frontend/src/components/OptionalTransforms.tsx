@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import type { Dataset } from "../api/datasets";
+import { ProcessedOutput } from "./ProcessedOutput";
 import {
   applyAiTransform,
   generateAiTransformPlan,
@@ -128,7 +129,9 @@ export function OptionalTransforms({
         {operations.map((item) => (
           <button
             type="button"
+            aria-pressed={operation === item.value}
             className={operation === item.value ? "selected" : ""}
+            disabled={generation.isPending}
             key={item.value}
             onClick={() => {
               setOperation(item.value);
@@ -149,6 +152,7 @@ export function OptionalTransforms({
             <select
               id="optional-column"
               value={column}
+              disabled={generation.isPending}
               onChange={(event) => {
                 setColumn(event.target.value);
                 invalidate();
@@ -166,6 +170,7 @@ export function OptionalTransforms({
               rows={3}
               maxLength={1000}
               placeholder={selectedOperation.placeholder}
+              disabled={generation.isPending}
               onChange={(event) => {
                 setInstruction(event.target.value);
                 invalidate();
@@ -237,7 +242,7 @@ function PlanSummary({ plan }: { plan: AiTransformPlan }) {
       <div className="proposal-meta">
         <span>{plan.provider}</span>
         <span>{plan.model}</span>
-        <strong>{Math.round(plan.confidence * 100)}% confidence</strong>
+        <strong>{Math.round(plan.confidence * 100)}% model estimate</strong>
       </div>
       <h3>Model interpretation</h3>
       <p>{plan.explanation}</p>
@@ -245,7 +250,9 @@ function PlanSummary({ plan }: { plan: AiTransformPlan }) {
         <div><dt>Operation</dt><dd>{plan.operation.replaceAll("_", " ")}</dd></div>
         <div><dt>Column</dt><dd>{plan.column}</dd></div>
       </dl>
-      <p className="data-boundary">Verified: {plan.data_rows_sent} dataset rows sent to AI.</p>
+      <p className="data-boundary">
+        No dataset rows included by this app. The instruction and selected column name are sent.
+      </p>
     </div>
   );
 }
@@ -275,16 +282,19 @@ function OptionalPreview({
 }) {
   if (run) {
     return (
-      <div className="run-receipt">
-        <div>
-          <p className="eyebrow">Optional transform complete</p>
-          <h3>{run.transform_type.replaceAll("_", " ")}</h3>
-          <p>{run.affected_rows} rows changed. The original dataset remains untouched.</p>
-          {run.warnings.map((warning) => <small key={warning}>{warning}</small>)}
+      <div className="completed-output" role="status">
+        <div className="run-receipt">
+          <div>
+            <p className="eyebrow">Optional transform complete</p>
+            <h3>{run.transform_type.replaceAll("_", " ")}</h3>
+            <p>{run.affected_rows} rows changed. The original dataset remains untouched.</p>
+            {run.warnings.map((warning) => <small key={warning}>{warning}</small>)}
+          </div>
+          <a className="download-button" href={run.download_url}>
+            Download {run.output_format.toUpperCase()}
+          </a>
         </div>
-        <a className="download-button" href={run.download_url}>
-          Download {run.output_format.toUpperCase()}
-        </a>
+        <ProcessedOutput columns={run.result_columns} rows={run.result_preview} />
       </div>
     );
   }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import type { Dataset } from "../api/datasets";
+import { ProcessedOutput } from "./ProcessedOutput";
 import {
   applyTransformation,
   generateRegex,
@@ -99,6 +100,7 @@ export function TransformationStudio({
                   <input
                     type="checkbox"
                     checked={columns.includes(column)}
+                    disabled={generation.isPending}
                     onChange={() => toggleColumn(column)}
                   />
                   <span>{column}</span>
@@ -115,6 +117,7 @@ export function TransformationStudio({
               maxLength={1000}
               rows={3}
               placeholder="Find email addresses, including addresses inside Notes"
+              disabled={generation.isPending}
               onChange={(event) => {
                 setInstruction(event.target.value);
                 setProposal(undefined);
@@ -234,7 +237,15 @@ function TrustStatus({ hasProposal, hasPreview }: { hasProposal: boolean; hasPre
     : hasProposal
       ? "Preview required"
       : "Awaiting proposal";
-  return <span className={`trust-status ${hasPreview ? "passed" : ""}`}>{label}</span>;
+  return (
+    <span
+      aria-live="polite"
+      className={`trust-status ${hasPreview ? "passed" : ""}`}
+      role="status"
+    >
+      {label}
+    </span>
+  );
 }
 
 function ProposalEmptyState() {
@@ -253,7 +264,7 @@ function ProposalDetails({ proposal }: { proposal: RegexProposal }) {
       <div className="proposal-meta">
         <span>{proposal.provider}</span>
         <span>{proposal.model}</span>
-        <strong>{Math.round(proposal.confidence * 100)}% confidence</strong>
+        <strong>{Math.round(proposal.confidence * 100)}% model estimate</strong>
       </div>
       <h3>Model interpretation</h3>
       <p>{proposal.explanation}</p>
@@ -267,7 +278,9 @@ function ProposalDetails({ proposal }: { proposal: RegexProposal }) {
         <ExampleList title="Should match" values={proposal.positive_examples} />
         <ExampleList title="Should not match" values={proposal.negative_examples} />
       </div>
-      <p className="data-boundary">Verified: {proposal.data_rows_sent} dataset rows sent to AI.</p>
+      <p className="data-boundary">
+        No dataset rows included by this app. The instruction and selected column names are sent.
+      </p>
     </div>
   );
 }
@@ -347,20 +360,23 @@ function ApplyPanel({
 }) {
   if (run) {
     return (
-      <section className="run-receipt" aria-labelledby="run-heading">
-        <div>
-          <p className="eyebrow">Transformation complete</p>
-          <h3 id="run-heading">Your source remains untouched</h3>
-          <p>
-            Run {run.id.slice(0, 8)} recorded {run.match_count} matches across {run.affected_rows}
-            {" "}rows. The recipe is stored with the output artifact.
-          </p>
-          {run.warnings.map((warning) => <small key={warning}>{warning}</small>)}
-        </div>
-        <a className="download-button" href={run.download_url}>
-          Download {run.output_format.toUpperCase()}
-        </a>
-      </section>
+      <div className="completed-output" role="status">
+        <section className="run-receipt" aria-labelledby="run-heading">
+          <div>
+            <p className="eyebrow">Transformation complete</p>
+            <h3 id="run-heading">Your source remains untouched</h3>
+            <p>
+              Run {run.id.slice(0, 8)} recorded {run.match_count} matches across {run.affected_rows}
+              {" "}rows. The recipe is stored with the output artifact.
+            </p>
+            {run.warnings.map((warning) => <small key={warning}>{warning}</small>)}
+          </div>
+          <a className="download-button" href={run.download_url}>
+            Download {run.output_format.toUpperCase()}
+          </a>
+        </section>
+        <ProcessedOutput columns={run.result_columns} rows={run.result_preview} />
+      </div>
     );
   }
 

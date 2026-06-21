@@ -70,6 +70,8 @@ export const transformRunSchema = z.object({
   affected_rows: z.number().int().nonnegative(),
   changed_cells: z.number().int().nonnegative(),
   warnings: z.array(z.string()),
+  result_columns: z.array(z.string()),
+  result_preview: z.array(z.record(z.string(), z.unknown())),
   output_format: z.enum(["csv", "xlsx"]),
   download_url: z.string(),
   created_at: z.string()
