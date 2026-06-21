@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 
 import type { Dataset } from "../api/datasets";
 import {
+  applyTransformation,
   generateRegex,
   previewTransformation,
   type MatchSpan,
@@ -12,6 +13,9 @@ import {
 
 type TransformationStudioProps = {
   dataset: Dataset;
+  onComplete: () => void;
+  onPreview: () => void;
+  onPreviewInvalidated: () => void;
 };
 
 const supportedFlags: { label: string; value: RegexFlag }[] = [
@@ -19,7 +23,12 @@ const supportedFlags: { label: string; value: RegexFlag }[] = [
   { label: "Multiline", value: "MULTILINE" }
 ];
 
-export function TransformationStudio({ dataset }: TransformationStudioProps) {
+export function TransformationStudio({
+  dataset,
+  onComplete,
+  onPreview,
+  onPreviewInvalidated
+}: TransformationStudioProps) {
   const [columns, setColumns] = useState<string[]>(dataset.text_columns.slice(0, 1));
   const [instruction, setInstruction] = useState("");
   const [replacement, setReplacement] = useState("[REDACTED]");
@@ -28,7 +37,12 @@ export function TransformationStudio({ dataset }: TransformationStudioProps) {
   const [proposal, setProposal] = useState<RegexProposal>();
 
   const preview = useMutation({
-    mutationFn: previewTransformation
+    mutationFn: previewTransformation,
+    onSuccess: onPreview
+  });
+  const apply = useMutation({
+    mutationFn: applyTransformation,
+    onSuccess: onComplete
   });
   const generation = useMutation({
     mutationFn: generateRegex,
@@ -37,6 +51,8 @@ export function TransformationStudio({ dataset }: TransformationStudioProps) {
       setPattern(result.pattern);
       setFlags(result.flags);
       preview.reset();
+      apply.reset();
+      onPreviewInvalidated();
     }
   });
 
@@ -48,6 +64,8 @@ export function TransformationStudio({ dataset }: TransformationStudioProps) {
     );
     setProposal(undefined);
     preview.reset();
+    apply.reset();
+    onPreviewInvalidated();
   };
 
   const toggleFlag = (flag: RegexFlag) => {
@@ -56,6 +74,8 @@ export function TransformationStudio({ dataset }: TransformationStudioProps) {
     );
     setProposal(undefined);
     preview.reset();
+    apply.reset();
+    onPreviewInvalidated();
   };
 
   return (
@@ -99,6 +119,8 @@ export function TransformationStudio({ dataset }: TransformationStudioProps) {
                 setInstruction(event.target.value);
                 setProposal(undefined);
                 preview.reset();
+                apply.reset();
+                onPreviewInvalidated();
               }}
             />
           </label>
@@ -127,6 +149,8 @@ export function TransformationStudio({ dataset }: TransformationStudioProps) {
                 setPattern(event.target.value);
                 setProposal(undefined);
                 preview.reset();
+                apply.reset();
+                onPreviewInvalidated();
               }}
             />
           </label>
@@ -153,6 +177,8 @@ export function TransformationStudio({ dataset }: TransformationStudioProps) {
               onChange={(event) => {
                 setReplacement(event.target.value);
                 preview.reset();
+                apply.reset();
+                onPreviewInvalidated();
               }}
             />
           </label>
@@ -175,7 +201,29 @@ export function TransformationStudio({ dataset }: TransformationStudioProps) {
         </aside>
       </div>
 
-      {preview.data ? <PreviewResults result={preview.data} /> : null}
+      {preview.data ? (
+        <>
+          <PreviewResults result={preview.data} />
+          <ApplyPanel
+            error={apply.error?.message}
+            isApplying={apply.isPending}
+            onApply={() =>
+              apply.mutate({
+                datasetId: dataset.id,
+                instruction,
+                pattern,
+                replacement,
+                columns,
+                flags,
+                explanation: proposal?.explanation,
+                provider: proposal?.provider,
+                model: proposal?.model
+              })
+            }
+            run={apply.data}
+          />
+        </>
+      ) : null}
     </section>
   );
 }
@@ -282,6 +330,50 @@ function PreviewResults({ result }: { result: Awaited<ReturnType<typeof previewT
           ))
         )}
       </div>
+    </section>
+  );
+}
+
+function ApplyPanel({
+  error,
+  isApplying,
+  onApply,
+  run
+}: {
+  error?: string;
+  isApplying: boolean;
+  onApply: () => void;
+  run?: Awaited<ReturnType<typeof applyTransformation>>;
+}) {
+  if (run) {
+    return (
+      <section className="run-receipt" aria-labelledby="run-heading">
+        <div>
+          <p className="eyebrow">Transformation complete</p>
+          <h3 id="run-heading">Your source remains untouched</h3>
+          <p>
+            Run {run.id.slice(0, 8)} recorded {run.match_count} matches across {run.affected_rows}
+            {" "}rows. The recipe is stored with the output artifact.
+          </p>
+          {run.warnings.map((warning) => <small key={warning}>{warning}</small>)}
+        </div>
+        <a className="download-button" href={run.download_url}>
+          Download {run.output_format.toUpperCase()}
+        </a>
+      </section>
+    );
+  }
+
+  return (
+    <section className="apply-panel" aria-label="Approve transformation">
+      <div>
+        <strong>Ready to apply</strong>
+        <p>This reruns the same validated recipe and writes a separate output artifact.</p>
+        {error ? <InlineError message={error} /> : null}
+      </div>
+      <button type="button" disabled={isApplying} onClick={onApply}>
+        {isApplying ? "Applying transformation..." : "Approve and apply"}
+      </button>
     </section>
   );
 }

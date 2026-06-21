@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import { uploadDataset } from "./api/datasets";
@@ -8,8 +9,16 @@ import { TransformationStudio } from "./components/TransformationStudio";
 const stages = ["Upload", "Transform", "Review", "Export"];
 
 export function App() {
+  const [hasCompletedRun, setHasCompletedRun] = useState(false);
+  const [hasPreview, setHasPreview] = useState(false);
   const upload = useMutation({ mutationFn: uploadDataset });
-  const activeStage = upload.data ? 1 : 0;
+  const activeStage = hasCompletedRun ? 3 : hasPreview ? 2 : upload.data ? 1 : 0;
+
+  const resetDataset = () => {
+    setHasCompletedRun(false);
+    setHasPreview(false);
+    upload.reset();
+  };
 
   return (
     <main className="shell">
@@ -45,8 +54,16 @@ export function App() {
       <section className="workspace">
         {upload.data ? (
           <>
-            <DatasetProfile dataset={upload.data} onReplace={() => upload.reset()} />
-            <TransformationStudio dataset={upload.data} />
+            <DatasetProfile dataset={upload.data} onReplace={resetDataset} />
+            <TransformationStudio
+              dataset={upload.data}
+              onComplete={() => setHasCompletedRun(true)}
+              onPreview={() => setHasPreview(true)}
+              onPreviewInvalidated={() => {
+                setHasPreview(false);
+                setHasCompletedRun(false);
+              }}
+            />
           </>
         ) : (
           <FileDropzone

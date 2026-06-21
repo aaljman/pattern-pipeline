@@ -48,10 +48,32 @@ const previewSchema = z.object({
   )
 });
 
+const transformRunSchema = z.object({
+  id: z.string().uuid(),
+  dataset_id: z.string().uuid(),
+  instruction: z.string(),
+  pattern: z.string(),
+  flags: z.array(regexFlagSchema),
+  replacement: z.string(),
+  columns: z.array(z.string()),
+  explanation: z.string(),
+  provider: z.string(),
+  model_name: z.string(),
+  status: z.enum(["completed", "failed"]),
+  match_count: z.number().int().nonnegative(),
+  affected_rows: z.number().int().nonnegative(),
+  changed_cells: z.number().int().nonnegative(),
+  warnings: z.array(z.string()),
+  output_format: z.enum(["csv", "xlsx"]),
+  download_url: z.string(),
+  created_at: z.string()
+});
+
 export type RegexFlag = z.infer<typeof regexFlagSchema>;
 export type RegexProposal = z.infer<typeof regexProposalSchema>;
 export type TransformationPreview = z.infer<typeof previewSchema>;
 export type MatchSpan = z.infer<typeof matchSchema>;
+export type TransformRun = z.infer<typeof transformRunSchema>;
 
 type GenerateRegexInput = {
   datasetId: string;
@@ -65,6 +87,13 @@ type PreviewTransformationInput = {
   replacement: string;
   columns: string[];
   flags: RegexFlag[];
+};
+
+export type ApplyTransformationInput = PreviewTransformationInput & {
+  instruction: string;
+  explanation?: string;
+  provider?: string;
+  model?: string;
 };
 
 export function generateRegex(input: GenerateRegexInput) {
@@ -93,5 +122,26 @@ export function previewTransformation(input: PreviewTransformationInput) {
       })
     },
     previewSchema
+  );
+}
+
+export function applyTransformation(input: ApplyTransformationInput) {
+  return requestJson(
+    `/api/datasets/${input.datasetId}/transforms/apply/`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pattern: input.pattern,
+        replacement: input.replacement,
+        columns: input.columns,
+        flags: input.flags,
+        instruction: input.instruction,
+        explanation: input.explanation ?? "",
+        provider: input.provider ?? "",
+        model: input.model ?? ""
+      })
+    },
+    transformRunSchema
   );
 }

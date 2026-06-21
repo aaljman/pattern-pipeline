@@ -771,6 +771,64 @@ tbody tr:last-child td {
   background: rgba(220, 144, 27, 0.55);
 }
 
+.apply-panel,
+.run-receipt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px;
+  border: 1px solid rgba(87, 210, 216, 0.22);
+  border-radius: 11px;
+  background: linear-gradient(100deg, rgba(22, 91, 105, 0.18), rgba(12, 28, 44, 0.8));
+}
+
+.apply-panel strong,
+.run-receipt h3 {
+  color: #e5f6fa;
+}
+
+.apply-panel p,
+.run-receipt p {
+  margin: 6px 0 0;
+  color: #7f96aa;
+  font-size: 0.8rem;
+}
+
+.apply-panel button,
+.download-button {
+  flex: none;
+  padding: 11px 15px;
+  border: 0;
+  border-radius: 8px;
+  color: #06151c;
+  background: #86ebc9;
+  font-weight: 760;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.apply-panel button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.run-receipt {
+  border-color: rgba(134, 235, 201, 0.24);
+  background: linear-gradient(100deg, rgba(22, 105, 78, 0.18), rgba(12, 28, 44, 0.8));
+}
+
+.run-receipt h3 {
+  margin: 0;
+}
+
+.run-receipt small {
+  display: block;
+  margin-top: 8px;
+  color: #d2b86d;
+  font-size: 0.7rem;
+}
+
 @media (max-width: 680px) {
   .privacy-badge {
     display: none;
@@ -815,6 +873,17 @@ tbody tr:last-child td {
 
   .preview-metrics {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .apply-panel,
+  .run-receipt {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .apply-panel button,
+  .download-button {
+    align-self: flex-start;
   }
 
   .workspace,
