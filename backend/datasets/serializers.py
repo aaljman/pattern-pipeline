@@ -84,6 +84,8 @@ class TransformRunSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "dataset_id",
+            "transform_type",
+            "parameters",
             "instruction",
             "pattern",
             "flags",
@@ -104,3 +106,36 @@ class TransformRunSerializer(serializers.ModelSerializer):
 
     def get_download_url(self, instance: TransformRun) -> str:
         return reverse("transform-download", kwargs={"run_id": instance.id})
+
+
+class AiTransformGenerateRequestSerializer(serializers.Serializer):
+    operation = serializers.ChoiceField(
+        choices=["standardize_categories", "extract_fields"]
+    )
+    instruction = serializers.CharField(max_length=1_000)
+    column = serializers.CharField()
+
+
+class AiTransformPlanRequestSerializer(serializers.Serializer):
+    operation = serializers.ChoiceField(
+        choices=["standardize_categories", "extract_fields"]
+    )
+    column = serializers.CharField()
+    parameters = serializers.JSONField()
+
+    def validate_parameters(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Parameters must be a JSON object.")
+        return value
+
+
+class AiTransformApplyRequestSerializer(AiTransformPlanRequestSerializer):
+    instruction = serializers.CharField(
+        allow_blank=True,
+        required=False,
+        default="",
+        max_length=1_000,
+    )
+    explanation = serializers.CharField(allow_blank=True, required=False, default="")
+    provider = serializers.CharField(allow_blank=True, required=False, default="", max_length=64)
+    model = serializers.CharField(allow_blank=True, required=False, default="", max_length=128)

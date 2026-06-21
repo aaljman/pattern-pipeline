@@ -9,11 +9,19 @@ from rest_framework.views import APIView
 
 from .models import Dataset, TransformRun
 from .serializers import (
+    AiTransformApplyRequestSerializer,
+    AiTransformGenerateRequestSerializer,
+    AiTransformPlanRequestSerializer,
     DatasetSerializer,
     RegexGenerationRequestSerializer,
     TransformationApplyRequestSerializer,
     TransformationPreviewRequestSerializer,
     TransformRunSerializer,
+)
+from .services.ai_transformations import (
+    apply_ai_transformation,
+    generate_ai_transform_plan,
+    preview_ai_transformation,
 )
 from .services.ingestion import DatasetValidationError, ingest_dataset
 from .services.regex_generation import ProposalGenerationError, generate_regex_proposal
@@ -193,3 +201,99 @@ class TransformDownloadView(APIView):
             as_attachment=True,
             filename=download_name,
         )
+
+
+class AiTransformGenerateView(APIView):
+    def post(self, request, dataset_id):
+        try:
+            dataset = Dataset.objects.get(id=dataset_id)
+        except Dataset.DoesNotExist:
+            return Response(
+                {"code": "not_found", "message": "Dataset not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = AiTransformGenerateRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {
+                    "code": "invalid_request",
+                    "message": "Check the optional transformation request.",
+                    "field_errors": serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            plan = generate_ai_transform_plan(dataset, **serializer.validated_data)
+        except (ProposalGenerationError, TransformationValidationError) as exc:
+            return Response(
+                {"code": "generation_failed", "message": str(exc)},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        return Response(plan)
+
+
+class AiTransformPreviewView(APIView):
+    def post(self, request, dataset_id):
+        try:
+            dataset = Dataset.objects.get(id=dataset_id)
+        except Dataset.DoesNotExist:
+            return Response(
+                {"code": "not_found", "message": "Dataset not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = AiTransformPlanRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {
+                    "code": "invalid_request",
+                    "message": "Check the optional transformation plan.",
+                    "field_errors": serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            result = preview_ai_transformation(dataset, **serializer.validated_data)
+        except TransformationValidationError as exc:
+            return Response(
+                {"code": "unsafe_transform", "message": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(result)
+
+
+class AiTransformApplyView(APIView):
+    def post(self, request, dataset_id):
+        try:
+            dataset = Dataset.objects.get(id=dataset_id)
+        except Dataset.DoesNotExist:
+            return Response(
+                {"code": "not_found", "message": "Dataset not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = AiTransformApplyRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {
+                    "code": "invalid_request",
+                    "message": "Check the optional transformation plan.",
+                    "field_errors": serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        values = dict(serializer.validated_data)
+        metadata = {
+            key: values.pop(key)
+            for key in ["instruction", "explanation", "provider", "model"]
+        }
+        try:
+            run = apply_ai_transformation(dataset, metadata=metadata, **values)
+        except TransformationValidationError as exc:
+            return Response(
+                {"code": "unsafe_transform", "message": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(TransformRunSerializer(run).data, status=status.HTTP_201_CREATED)

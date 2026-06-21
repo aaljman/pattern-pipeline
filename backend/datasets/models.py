@@ -49,12 +49,23 @@ class Dataset(models.Model):
 
 
 class TransformRun(models.Model):
+    class Type(models.TextChoices):
+        REGEX_REPLACE = "regex_replace", "Regex replace"
+        STANDARDIZE_CATEGORIES = "standardize_categories", "Standardize categories"
+        EXTRACT_FIELDS = "extract_fields", "Extract fields"
+
     class Status(models.TextChoices):
         COMPLETED = "completed", "Completed"
         FAILED = "failed", "Failed"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     dataset = models.ForeignKey(Dataset, on_delete=models.CASCADE, related_name="transform_runs")
+    transform_type = models.CharField(
+        max_length=32,
+        choices=Type.choices,
+        default=Type.REGEX_REPLACE,
+    )
+    parameters = models.JSONField(default=dict)
     instruction = models.TextField(blank=True)
     pattern = models.TextField()
     flags = models.JSONField(default=list)

@@ -1,6 +1,9 @@
 from django.urls import path
 
 from .views import (
+    AiTransformApplyView,
+    AiTransformGenerateView,
+    AiTransformPreviewView,
     DatasetDetailView,
     DatasetListCreateView,
     RegexGenerationView,
@@ -16,6 +19,21 @@ urlpatterns = [
     path("health/", health, name="health"),
     path("datasets/", DatasetListCreateView.as_view(), name="dataset-create"),
     path("datasets/<uuid:dataset_id>/", DatasetDetailView.as_view(), name="dataset-detail"),
+    path(
+        "datasets/<uuid:dataset_id>/ai-transforms/generate/",
+        AiTransformGenerateView.as_view(),
+        name="ai-transform-generate",
+    ),
+    path(
+        "datasets/<uuid:dataset_id>/ai-transforms/preview/",
+        AiTransformPreviewView.as_view(),
+        name="ai-transform-preview",
+    ),
+    path(
+        "datasets/<uuid:dataset_id>/ai-transforms/apply/",
+        AiTransformApplyView.as_view(),
+        name="ai-transform-apply",
+    ),
     path(
         "datasets/<uuid:dataset_id>/transforms/apply/",
         TransformationApplyView.as_view(),

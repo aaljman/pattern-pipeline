@@ -132,6 +132,33 @@ def apply_transformation(
     metadata: dict | None = None,
 ) -> TransformRun:
     transformed, result = execute_transformation(dataset, spec)
+    return persist_transformation_run(
+        dataset=dataset,
+        transformed=transformed,
+        result=result,
+        transform_type=TransformRun.Type.REGEX_REPLACE,
+        parameters={},
+        pattern=spec.pattern,
+        flags=spec.flags,
+        replacement=spec.replacement,
+        columns=spec.columns,
+        metadata=metadata,
+    )
+
+
+def persist_transformation_run(
+    *,
+    dataset: Dataset,
+    transformed: pd.DataFrame,
+    result: dict,
+    transform_type: str,
+    parameters: dict,
+    pattern: str,
+    flags: list[str],
+    replacement: str,
+    columns: list[str],
+    metadata: dict | None = None,
+) -> TransformRun:
     safe_frame, escaped_formulas = escape_spreadsheet_formulas(transformed)
     warnings = list(result["warnings"])
     if escaped_formulas:
@@ -143,11 +170,13 @@ def apply_transformation(
     content = serialise_output(safe_frame, output_format, dataset.sheet_name)
     run = TransformRun(
         dataset=dataset,
+        transform_type=transform_type,
+        parameters=parameters,
         instruction=(metadata or {}).get("instruction", ""),
-        pattern=spec.pattern,
-        flags=spec.flags,
-        replacement=spec.replacement,
-        columns=spec.columns,
+        pattern=pattern,
+        flags=flags,
+        replacement=replacement,
+        columns=columns,
         explanation=(metadata or {}).get("explanation", ""),
         provider=(metadata or {}).get("provider", ""),
         model_name=(metadata or {}).get("model", ""),
