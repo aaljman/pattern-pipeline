@@ -1,6 +1,8 @@
 import shutil
 import tempfile
+from datetime import time
 from io import BytesIO
+from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
@@ -56,6 +58,37 @@ class DatasetApiTests(APITestCase):
         self.assertEqual(response.data["sheet_name"], "Customers")
         self.assertEqual(response.data["preview"][0]["phone"], "0412 345 678")
 
+    def test_normalizes_numeric_headers_and_time_values_from_xlsx(self):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append([123, "opens_at"])
+        sheet.append(["value", time(9, 30)])
+        buffer = BytesIO()
+        workbook.save(buffer)
+        upload = SimpleUploadedFile(
+            "mixed.xlsx",
+            buffer.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        response = self.client.post("/api/datasets/", {"file": upload}, format="multipart")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["columns"][0]["name"], "123")
+        self.assertEqual(response.data["preview"][0]["opens_at"], "09:30:00")
+
+    def test_rejects_fake_xlsx_zip_archive(self):
+        upload = SimpleUploadedFile(
+            "fake.xlsx",
+            b"PK\x03\x04not-a-real-archive",
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        response = self.client.post("/api/datasets/", {"file": upload}, format="multipart")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], "invalid_file")
+
     def test_rejects_unsupported_file_type(self):
         upload = SimpleUploadedFile("customers.txt", b"name\nAda\n", content_type="text/plain")
 
@@ -64,6 +97,58 @@ class DatasetApiTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["code"], "invalid_file")
         self.assertEqual(Dataset.objects.count(), 0)
+
+    def test_rejects_empty_files(self):
+        upload = SimpleUploadedFile("empty.csv", b"", content_type="text/csv")
+
+        response = self.client.post("/api/datasets/", {"file": upload}, format="multipart")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("empty", response.data["message"])
+
+    @patch("datasets.services.ingestion.MAX_ROWS", 1)
+    def test_rejects_files_over_row_limit(self):
+        upload = SimpleUploadedFile(
+            "rows.csv",
+            b"name\nAda\nLin\n",
+            content_type="text/csv",
+        )
+
+        response = self.client.post("/api/datasets/", {"file": upload}, format="multipart")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("at most 1 rows", response.data["message"])
+
+    @patch("datasets.services.ingestion.MAX_COLUMNS", 2)
+    def test_rejects_files_over_column_limit(self):
+        upload = SimpleUploadedFile(
+            "columns.csv",
+            b"one,two,three\n1,2,3\n",
+            content_type="text/csv",
+        )
+
+        response = self.client.post("/api/datasets/", {"file": upload}, format="multipart")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("at most 2 columns", response.data["message"])
+
+    @patch("datasets.services.ingestion.MAX_XLSX_UNCOMPRESSED_BYTES", 1)
+    def test_rejects_xlsx_over_expanded_size_limit(self):
+        workbook = Workbook()
+        workbook.active.append(["name"])
+        workbook.active.append(["Ada"])
+        buffer = BytesIO()
+        workbook.save(buffer)
+        upload = SimpleUploadedFile(
+            "expanded.xlsx",
+            buffer.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        response = self.client.post("/api/datasets/", {"file": upload}, format="multipart")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("expanded XLSX", response.data["message"])
 
     def test_returns_dataset_profile(self):
         upload = SimpleUploadedFile("names.csv", b"name\nAda\n", content_type="text/csv")
