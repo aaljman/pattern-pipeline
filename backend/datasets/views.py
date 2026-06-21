@@ -1,10 +1,13 @@
 from pathlib import Path
 
+from django.db import connection
 from django.http import FileResponse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .models import Dataset, TransformRun
@@ -35,11 +38,61 @@ from .services.transformations import (
 
 @api_view(["GET"])
 def health(request):
-    return Response({"status": "ok"})
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except Exception:
+        return Response({"status": "unavailable"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    response = Response({"status": "ok"})
+    response["Cache-Control"] = "no-store"
+    return response
 
 
-class DatasetListCreateView(APIView):
+class PrivateAPIView(APIView):
+    throttle_classes = [ScopedRateThrottle]
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response["Cache-Control"] = "no-store, private"
+        return response
+
+
+def get_dataset_or_error(dataset_id):
+    try:
+        dataset = Dataset.objects.get(id=dataset_id)
+    except Dataset.DoesNotExist:
+        return None, Response(
+            {"code": "not_found", "message": "Dataset not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if dataset.expires_at <= timezone.now():
+        return None, Response(
+            {"code": "dataset_expired", "message": "This dataset has expired. Upload it again."},
+            status=status.HTTP_410_GONE,
+        )
+    return dataset, None
+
+
+def get_run_or_error(run_id):
+    try:
+        run = TransformRun.objects.select_related("dataset").get(id=run_id)
+    except TransformRun.DoesNotExist:
+        return None, Response(
+            {"code": "not_found", "message": "Transformation run not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if run.dataset.expires_at <= timezone.now():
+        return None, Response(
+            {"code": "dataset_expired", "message": "This dataset has expired. Upload it again."},
+            status=status.HTTP_410_GONE,
+        )
+    return run, None
+
+
+class DatasetListCreateView(PrivateAPIView):
     parser_classes = [MultiPartParser, FormParser]
+    throttle_scope = "upload"
 
     def post(self, request):
         upload = request.FILES.get("file")
@@ -60,27 +113,23 @@ class DatasetListCreateView(APIView):
         return Response(DatasetSerializer(dataset).data, status=status.HTTP_201_CREATED)
 
 
-class DatasetDetailView(APIView):
+class DatasetDetailView(PrivateAPIView):
+    throttle_scope = "read"
+
     def get(self, request, dataset_id):
-        try:
-            dataset = Dataset.objects.get(id=dataset_id)
-        except Dataset.DoesNotExist:
-            return Response(
-                {"code": "not_found", "message": "Dataset not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        dataset, error = get_dataset_or_error(dataset_id)
+        if error:
+            return error
         return Response(DatasetSerializer(dataset).data)
 
 
-class TransformationPreviewView(APIView):
+class TransformationPreviewView(PrivateAPIView):
+    throttle_scope = "transform"
+
     def post(self, request, dataset_id):
-        try:
-            dataset = Dataset.objects.get(id=dataset_id)
-        except Dataset.DoesNotExist:
-            return Response(
-                {"code": "not_found", "message": "Dataset not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        dataset, error = get_dataset_or_error(dataset_id)
+        if error:
+            return error
 
         serializer = TransformationPreviewRequestSerializer(data=request.data)
         if not serializer.is_valid():
@@ -104,15 +153,13 @@ class TransformationPreviewView(APIView):
         return Response(result)
 
 
-class RegexGenerationView(APIView):
+class RegexGenerationView(PrivateAPIView):
+    throttle_scope = "generation"
+
     def post(self, request, dataset_id):
-        try:
-            dataset = Dataset.objects.get(id=dataset_id)
-        except Dataset.DoesNotExist:
-            return Response(
-                {"code": "not_found", "message": "Dataset not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        dataset, error = get_dataset_or_error(dataset_id)
+        if error:
+            return error
 
         serializer = RegexGenerationRequestSerializer(data=request.data)
         if not serializer.is_valid():
@@ -135,15 +182,13 @@ class RegexGenerationView(APIView):
         return Response(proposal)
 
 
-class TransformationApplyView(APIView):
+class TransformationApplyView(PrivateAPIView):
+    throttle_scope = "transform"
+
     def post(self, request, dataset_id):
-        try:
-            dataset = Dataset.objects.get(id=dataset_id)
-        except Dataset.DoesNotExist:
-            return Response(
-                {"code": "not_found", "message": "Dataset not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        dataset, error = get_dataset_or_error(dataset_id)
+        if error:
+            return error
 
         serializer = TransformationApplyRequestSerializer(data=request.data)
         if not serializer.is_valid():
@@ -172,46 +217,43 @@ class TransformationApplyView(APIView):
         return Response(TransformRunSerializer(run).data, status=status.HTTP_201_CREATED)
 
 
-class TransformRunDetailView(APIView):
+class TransformRunDetailView(PrivateAPIView):
+    throttle_scope = "read"
+
     def get(self, request, run_id):
-        try:
-            run = TransformRun.objects.get(id=run_id)
-        except TransformRun.DoesNotExist:
-            return Response(
-                {"code": "not_found", "message": "Transformation run not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        run, error = get_run_or_error(run_id)
+        if error:
+            return error
         return Response(TransformRunSerializer(run).data)
 
 
-class TransformDownloadView(APIView):
+class TransformDownloadView(PrivateAPIView):
+    throttle_scope = "download"
+
     def get(self, request, run_id):
-        try:
-            run = TransformRun.objects.select_related("dataset").get(id=run_id)
-        except TransformRun.DoesNotExist:
-            return Response(
-                {"code": "not_found", "message": "Transformation run not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        run, error = get_run_or_error(run_id)
+        if error:
+            return error
 
         extension = run.output_format
         download_name = f"processed-{Path(run.dataset.original_name).stem}.{extension}"
-        return FileResponse(
-            run.result_file.open("rb"),
-            as_attachment=True,
-            filename=download_name,
-        )
-
-
-class AiTransformGenerateView(APIView):
-    def post(self, request, dataset_id):
         try:
-            dataset = Dataset.objects.get(id=dataset_id)
-        except Dataset.DoesNotExist:
+            result_file = run.result_file.open("rb")
+        except OSError:
             return Response(
-                {"code": "not_found", "message": "Dataset not found."},
-                status=status.HTTP_404_NOT_FOUND,
+                {"code": "artifact_unavailable", "message": "The output file is no longer available."},
+                status=status.HTTP_410_GONE,
             )
+        return FileResponse(result_file, as_attachment=True, filename=download_name)
+
+
+class AiTransformGenerateView(PrivateAPIView):
+    throttle_scope = "generation"
+
+    def post(self, request, dataset_id):
+        dataset, error = get_dataset_or_error(dataset_id)
+        if error:
+            return error
 
         serializer = AiTransformGenerateRequestSerializer(data=request.data)
         if not serializer.is_valid():
@@ -233,15 +275,13 @@ class AiTransformGenerateView(APIView):
         return Response(plan)
 
 
-class AiTransformPreviewView(APIView):
+class AiTransformPreviewView(PrivateAPIView):
+    throttle_scope = "transform"
+
     def post(self, request, dataset_id):
-        try:
-            dataset = Dataset.objects.get(id=dataset_id)
-        except Dataset.DoesNotExist:
-            return Response(
-                {"code": "not_found", "message": "Dataset not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        dataset, error = get_dataset_or_error(dataset_id)
+        if error:
+            return error
 
         serializer = AiTransformPlanRequestSerializer(data=request.data)
         if not serializer.is_valid():
@@ -263,15 +303,13 @@ class AiTransformPreviewView(APIView):
         return Response(result)
 
 
-class AiTransformApplyView(APIView):
+class AiTransformApplyView(PrivateAPIView):
+    throttle_scope = "transform"
+
     def post(self, request, dataset_id):
-        try:
-            dataset = Dataset.objects.get(id=dataset_id)
-        except Dataset.DoesNotExist:
-            return Response(
-                {"code": "not_found", "message": "Dataset not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        dataset, error = get_dataset_or_error(dataset_id)
+        if error:
+            return error
 
         serializer = AiTransformApplyRequestSerializer(data=request.data)
         if not serializer.is_valid():

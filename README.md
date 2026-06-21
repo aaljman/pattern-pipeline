@@ -47,7 +47,7 @@ Django REST Framework
   |-- structured LLM provider boundary
   |-- timeout-protected deterministic executors
   |-- immutable datasets and transformation runs
-PostgreSQL/SQLite + filesystem artifacts
+PostgreSQL/SQLite + short-lived database-backed artifacts in production
 ```
 
 Core workflow:
@@ -100,6 +100,8 @@ No uploaded cell values are included in model requests.
 ```bash
 python backend/manage.py test datasets
 python backend/manage.py makemigrations --check --dry-run
+DJANGO_DEBUG=false DJANGO_SECRET_KEY='<strong-random-value>' \
+  python backend/manage.py check --deploy
 
 cd frontend
 pnpm lint
@@ -120,7 +122,11 @@ docker compose up --build
 ```
 
 The multi-stage image builds React, collects hashed static assets through
-WhiteNoise, migrates the database at startup, and serves Django with Gunicorn.
+WhiteNoise, migrates the database at startup, and serves Django with Gunicorn as
+an unprivileged user. Production mode stores short-lived uploads and results in
+the configured database so stateless container restarts do not break active runs.
+For a larger or longer-lived service, replace this demo storage backend with
+object storage.
 
 The included [`render.yaml`](render.yaml) provisions a Docker web service and
 PostgreSQL database. Configure `OPENAI_API_KEY` in the Render dashboard; the
@@ -140,8 +146,10 @@ built-in plans remain available if it is omitted.
 ## Security and limitations
 
 - Uploads are limited to CSV/XLSX and 20 MB; XLSX signatures are checked.
+- Expanded XLSX size, rows, columns, cells, transform work, matches, output cells,
+  total output size, and anonymous request rates are bounded.
 - Regex length, cell length, supported flags, nested repetition, empty matches,
-  and per-cell execution time are bounded.
+  recursion, zero-width matches, and per-cell execution time are bounded.
 - Spreadsheet values beginning with `=`, `+`, `-`, or `@` are escaped on export.
 - Files expire after one hour. Schedule
   `python backend/manage.py purge_expired_datasets` hourly to remove expired rows
@@ -149,7 +157,8 @@ built-in plans remain available if it is omitted.
 - XLSX processing currently operates on the first sheet and exports processed
   tabular data rather than preserving workbook formatting or formulas.
 - Authentication and multi-user project isolation are intentionally outside this
-  exercise; opaque UUIDs are not a substitute for authorization in production.
+  exercise; opaque UUIDs are not authorization. The public demo is rate-limited,
+  but users should upload only synthetic or non-sensitive data.
 
 ## Repository layout
 

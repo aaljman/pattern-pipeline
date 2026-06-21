@@ -38,3 +38,10 @@ jobs:
       - run: pip install -r backend/requirements.txt
       - run: python backend/manage.py test datasets
       - run: python backend/manage.py makemigrations --check --dry-run
+      - run: python backend/manage.py check --deploy
+        env:
+          DJANGO_DEBUG: "false"
+          DJANGO_SECRET_KEY: "ci-only-production-check-key-with-more-than-fifty-characters-123"
+          DJANGO_ALLOWED_HOSTS: "example.test"
+
+      - run: docker build --tag pattern-pipeline:test .

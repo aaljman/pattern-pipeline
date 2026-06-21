@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 import dj_database_url
@@ -8,8 +9,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_DIR = BASE_DIR.parent
 FRONTEND_DIST = PROJECT_DIR / "frontend" / "dist"
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "development-only-secret-key")
 DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() == "true"
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
+if DEBUG and not SECRET_KEY:
+    SECRET_KEY = "development-only-secret-key"
+if not DEBUG and not SECRET_KEY:
+    raise RuntimeError("DJANGO_SECRET_KEY is required when DJANGO_DEBUG is false.")
 ALLOWED_HOSTS = [
     host.strip()
     for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
@@ -109,7 +114,7 @@ SECURE_HSTS_PRELOAD = not DEBUG
 if not DEBUG:
     STORAGES = {
         "default": {
-            "BACKEND": "django.core.files.storage.FileSystemStorage",
+            "BACKEND": "datasets.storage.DatabaseStorage",
         },
         "staticfiles": {
             "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
@@ -119,4 +124,17 @@ if not DEBUG:
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
+    "DEFAULT_THROTTLE_RATES": {
+        "upload": "20/hour",
+        "generation": "30/hour",
+        "transform": "60/hour",
+        "download": "60/hour",
+        "read": "120/hour",
+    },
 }
+
+if "test" in sys.argv:
+    REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
+        scope: "10000/minute"
+        for scope in REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]
+    }

@@ -21,7 +21,11 @@ COPY backend/ ./backend/
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 WORKDIR /app/backend
-RUN python manage.py collectstatic --noinput
+RUN DJANGO_SECRET_KEY=build-only-collectstatic-key python manage.py collectstatic --noinput
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /app/data \
+    && chown -R appuser:appuser /app/backend /app/data
 
 EXPOSE 8000
-CMD ["/bin/sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120"]
+USER appuser
+CMD ["/bin/sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120 --access-logfile - --error-logfile -"]

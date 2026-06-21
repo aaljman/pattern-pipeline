@@ -17,6 +17,13 @@ def transform_upload_path(instance, filename: str) -> str:
     return f"transforms/{instance.id}/{filename}"
 
 
+class StoredFile(models.Model):
+    name = models.CharField(max_length=500, primary_key=True)
+    content = models.BinaryField()
+    size_bytes = models.PositiveBigIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class Dataset(models.Model):
     class Format(models.TextChoices):
         CSV = "csv", "CSV"

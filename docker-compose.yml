@@ -9,8 +9,9 @@ services:
       DJANGO_DEBUG: "false"
       DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
       DJANGO_SECURE_SSL_REDIRECT: "false"
+      DATABASE_URL: "sqlite:////app/data/db.sqlite3"
     volumes:
-      - app-media:/app/backend/media
+      - app-data:/app/data
 
 volumes:
-  app-media:
+  app-data:
