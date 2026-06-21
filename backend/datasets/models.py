@@ -13,6 +13,10 @@ def dataset_upload_path(instance, filename: str) -> str:
     return f"datasets/{instance.id}/{filename}"
 
 
+def transform_upload_path(instance, filename: str) -> str:
+    return f"transforms/{instance.id}/{filename}"
+
+
 class Dataset(models.Model):
     class Format(models.TextChoices):
         CSV = "csv", "CSV"
@@ -38,6 +42,38 @@ class Dataset(models.Model):
         default=Status.READY,
     )
     expires_at = models.DateTimeField(default=default_expiry)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class TransformRun(models.Model):
+    class Status(models.TextChoices):
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    dataset = models.ForeignKey(Dataset, on_delete=models.CASCADE, related_name="transform_runs")
+    instruction = models.TextField(blank=True)
+    pattern = models.TextField()
+    flags = models.JSONField(default=list)
+    replacement = models.TextField(blank=True)
+    columns = models.JSONField(default=list)
+    explanation = models.TextField(blank=True)
+    provider = models.CharField(max_length=64, blank=True)
+    model_name = models.CharField(max_length=128, blank=True)
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.COMPLETED,
+    )
+    match_count = models.PositiveBigIntegerField(default=0)
+    affected_rows = models.PositiveBigIntegerField(default=0)
+    changed_cells = models.PositiveBigIntegerField(default=0)
+    warnings = models.JSONField(default=list)
+    result_file = models.FileField(upload_to=transform_upload_path)
+    output_format = models.CharField(max_length=8, choices=Dataset.Format.choices)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

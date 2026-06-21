@@ -1,6 +1,8 @@
 from rest_framework import serializers
 
-from .models import Dataset
+from django.urls import reverse
+
+from .models import Dataset, TransformRun
 
 
 class DatasetSerializer(serializers.ModelSerializer):
@@ -59,3 +61,46 @@ class RegexGenerationRequestSerializer(serializers.Serializer):
 
     def validate_columns(self, value: list[str]) -> list[str]:
         return list(dict.fromkeys(value))
+
+
+class TransformationApplyRequestSerializer(TransformationPreviewRequestSerializer):
+    instruction = serializers.CharField(
+        allow_blank=True,
+        required=False,
+        default="",
+        max_length=1_000,
+    )
+    explanation = serializers.CharField(allow_blank=True, required=False, default="")
+    provider = serializers.CharField(allow_blank=True, required=False, default="", max_length=64)
+    model = serializers.CharField(allow_blank=True, required=False, default="", max_length=128)
+
+
+class TransformRunSerializer(serializers.ModelSerializer):
+    dataset_id = serializers.UUIDField(read_only=True)
+    download_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TransformRun
+        fields = [
+            "id",
+            "dataset_id",
+            "instruction",
+            "pattern",
+            "flags",
+            "replacement",
+            "columns",
+            "explanation",
+            "provider",
+            "model_name",
+            "status",
+            "match_count",
+            "affected_rows",
+            "changed_cells",
+            "warnings",
+            "output_format",
+            "download_url",
+            "created_at",
+        ]
+
+    def get_download_url(self, instance: TransformRun) -> str:
+        return reverse("transform-download", kwargs={"run_id": instance.id})

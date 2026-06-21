@@ -1,9 +1,12 @@
 from dataclasses import dataclass
+from io import BytesIO, StringIO
+from pathlib import Path
 
 import pandas as pd
 import regex
+from django.core.files.base import ContentFile
 
-from datasets.models import Dataset
+from datasets.models import Dataset, TransformRun
 from datasets.services.ingestion import read_dataframe
 
 
@@ -32,6 +35,14 @@ class TransformationSpec:
 
 
 def preview_transformation(dataset: Dataset, spec: TransformationSpec) -> dict:
+    _, result = execute_transformation(dataset, spec)
+    return result
+
+
+def execute_transformation(
+    dataset: Dataset,
+    spec: TransformationSpec,
+) -> tuple[pd.DataFrame, dict]:
     compiled = compile_pattern(spec.pattern, spec.flags)
     validate_columns(dataset, spec.columns)
     if len(spec.replacement) > MAX_REPLACEMENT_LENGTH:
@@ -41,13 +52,15 @@ def preview_transformation(dataset: Dataset, spec: TransformationSpec) -> dict:
 
     with dataset.source_file.open("rb") as source:
         frame, _ = read_dataframe(source, dataset.file_format, dataset.sheet_name)
+    frame = frame.reset_index(drop=True)
+    transformed = frame.copy()
 
     match_count = 0
     affected_rows: set[int] = set()
     changed_cells = 0
     preview: list[dict] = []
 
-    for row_index, row in frame.reset_index(drop=True).iterrows():
+    for row_index, row in frame.iterrows():
         row_changes = []
         for column in spec.columns:
             value = row[column]
@@ -77,6 +90,7 @@ def preview_transformation(dataset: Dataset, spec: TransformationSpec) -> dict:
             match_count += len(matches)
             affected_rows.add(row_index)
             changed_cells += 1
+            transformed.at[row_index, column] = updated
             if len(preview) < PREVIEW_CHANGE_LIMIT:
                 row_changes.append(
                     {
@@ -98,7 +112,7 @@ def preview_transformation(dataset: Dataset, spec: TransformationSpec) -> dict:
             preview.append({"row_index": row_index, "changes": row_changes})
 
     warnings = build_warnings(len(frame.index), len(affected_rows), match_count)
-    return {
+    return transformed, {
         "pattern": spec.pattern,
         "replacement": spec.replacement,
         "columns": spec.columns,
@@ -110,6 +124,66 @@ def preview_transformation(dataset: Dataset, spec: TransformationSpec) -> dict:
         "warnings": warnings,
         "preview": preview,
     }
+
+
+def apply_transformation(
+    dataset: Dataset,
+    spec: TransformationSpec,
+    metadata: dict | None = None,
+) -> TransformRun:
+    transformed, result = execute_transformation(dataset, spec)
+    safe_frame, escaped_formulas = escape_spreadsheet_formulas(transformed)
+    warnings = list(result["warnings"])
+    if escaped_formulas:
+        warnings.append(
+            f"Escaped {escaped_formulas} formula-like cell value(s) for safe spreadsheet export."
+        )
+
+    output_format = dataset.file_format
+    content = serialise_output(safe_frame, output_format, dataset.sheet_name)
+    run = TransformRun(
+        dataset=dataset,
+        instruction=(metadata or {}).get("instruction", ""),
+        pattern=spec.pattern,
+        flags=spec.flags,
+        replacement=spec.replacement,
+        columns=spec.columns,
+        explanation=(metadata or {}).get("explanation", ""),
+        provider=(metadata or {}).get("provider", ""),
+        model_name=(metadata or {}).get("model", ""),
+        match_count=result["match_count"],
+        affected_rows=result["affected_rows"],
+        changed_cells=result["changed_cells"],
+        warnings=warnings,
+        output_format=output_format,
+    )
+    filename = f"processed-{Path(dataset.original_name).stem}.{output_format}"
+    run.result_file.save(filename, ContentFile(content), save=False)
+    run.save()
+    return run
+
+
+def escape_spreadsheet_formulas(frame: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    safe_frame = frame.copy()
+    escaped = 0
+    for column in safe_frame.columns:
+        for row_index, value in safe_frame[column].items():
+            if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+                safe_frame.at[row_index, column] = f"'{value}"
+                escaped += 1
+    return safe_frame, escaped
+
+
+def serialise_output(frame: pd.DataFrame, output_format: str, sheet_name: str) -> bytes:
+    if output_format == Dataset.Format.CSV:
+        output = StringIO(newline="")
+        frame.to_csv(output, index=False, lineterminator="\n")
+        return output.getvalue().encode("utf-8")
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        frame.to_excel(writer, index=False, sheet_name=(sheet_name or "Processed")[:31])
+    return output.getvalue()
 
 
 def compile_pattern(pattern: str, flags: list[str]) -> regex.Pattern:
