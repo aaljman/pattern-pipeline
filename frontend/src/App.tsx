@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { uploadDataset } from "./api/datasets";
 import { DatasetProfile } from "./components/DatasetProfile";
 import { FileDropzone } from "./components/FileDropzone";
+import { OptionalTransforms } from "./components/OptionalTransforms";
 import { TransformationStudio } from "./components/TransformationStudio";
 
 const stages = ["Upload", "Transform", "Review", "Export"];
@@ -56,6 +57,15 @@ export function App() {
           <>
             <DatasetProfile dataset={upload.data} onReplace={resetDataset} />
             <TransformationStudio
+              dataset={upload.data}
+              onComplete={() => setHasCompletedRun(true)}
+              onPreview={() => setHasPreview(true)}
+              onPreviewInvalidated={() => {
+                setHasPreview(false);
+                setHasCompletedRun(false);
+              }}
+            />
+            <OptionalTransforms
               dataset={upload.data}
               onComplete={() => setHasCompletedRun(true)}
               onPreview={() => setHasPreview(true)}

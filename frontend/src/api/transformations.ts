@@ -48,9 +48,15 @@ const previewSchema = z.object({
   )
 });
 
-const transformRunSchema = z.object({
+export const transformRunSchema = z.object({
   id: z.string().uuid(),
   dataset_id: z.string().uuid(),
+  transform_type: z.enum([
+    "regex_replace",
+    "standardize_categories",
+    "extract_fields"
+  ]),
+  parameters: z.record(z.string(), z.unknown()),
   instruction: z.string(),
   pattern: z.string(),
   flags: z.array(regexFlagSchema),
@@ -69,11 +75,41 @@ const transformRunSchema = z.object({
   created_at: z.string()
 });
 
+export const aiTransformOperationSchema = z.enum([
+  "standardize_categories",
+  "extract_fields"
+]);
+
+const aiTransformPlanSchema = z.object({
+  operation: aiTransformOperationSchema,
+  column: z.string(),
+  parameters: z.record(z.string(), z.unknown()),
+  explanation: z.string(),
+  confidence: z.number().min(0).max(1),
+  provider: z.string(),
+  model: z.string(),
+  data_rows_sent: z.literal(0)
+});
+
+const aiTransformPreviewSchema = z.object({
+  operation: aiTransformOperationSchema,
+  column: z.string(),
+  affected_rows: z.number().int().nonnegative(),
+  changed_cells: z.number().int().nonnegative(),
+  total_rows: z.number().int().nonnegative(),
+  output_columns: z.array(z.string()),
+  warnings: z.array(z.string()),
+  preview: z.array(z.record(z.string(), z.unknown()))
+});
+
 export type RegexFlag = z.infer<typeof regexFlagSchema>;
 export type RegexProposal = z.infer<typeof regexProposalSchema>;
 export type TransformationPreview = z.infer<typeof previewSchema>;
 export type MatchSpan = z.infer<typeof matchSchema>;
 export type TransformRun = z.infer<typeof transformRunSchema>;
+export type AiTransformOperation = z.infer<typeof aiTransformOperationSchema>;
+export type AiTransformPlan = z.infer<typeof aiTransformPlanSchema>;
+export type AiTransformPreview = z.infer<typeof aiTransformPreviewSchema>;
 
 type GenerateRegexInput = {
   datasetId: string;
@@ -136,6 +172,79 @@ export function applyTransformation(input: ApplyTransformationInput) {
         replacement: input.replacement,
         columns: input.columns,
         flags: input.flags,
+        instruction: input.instruction,
+        explanation: input.explanation ?? "",
+        provider: input.provider ?? "",
+        model: input.model ?? ""
+      })
+    },
+    transformRunSchema
+  );
+}
+
+type GenerateAiTransformInput = {
+  datasetId: string;
+  operation: AiTransformOperation;
+  instruction: string;
+  column: string;
+};
+
+type AiTransformExecutionInput = {
+  datasetId: string;
+  operation: AiTransformOperation;
+  column: string;
+  parameters: Record<string, unknown>;
+};
+
+export function generateAiTransformPlan(input: GenerateAiTransformInput) {
+  return requestJson(
+    `/api/datasets/${input.datasetId}/ai-transforms/generate/`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        operation: input.operation,
+        instruction: input.instruction,
+        column: input.column
+      })
+    },
+    aiTransformPlanSchema
+  );
+}
+
+export function previewAiTransform(input: AiTransformExecutionInput) {
+  return requestJson(
+    `/api/datasets/${input.datasetId}/ai-transforms/preview/`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        operation: input.operation,
+        column: input.column,
+        parameters: input.parameters
+      })
+    },
+    aiTransformPreviewSchema
+  );
+}
+
+export function applyAiTransform(
+  input: AiTransformExecutionInput & {
+    instruction: string;
+    explanation?: string;
+    provider?: string;
+    model?: string;
+  }
+) {
+  return requestJson(
+    `/api/datasets/${input.datasetId}/ai-transforms/apply/`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        operation: input.operation,
+        column: input.column,
+        parameters: input.parameters,
         instruction: input.instruction,
         explanation: input.explanation ?? "",
         provider: input.provider ?? "",
