@@ -107,6 +107,36 @@ class TransformationPreviewApiTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("match empty text", response.data["message"])
 
+    def test_rejects_recursive_patterns(self):
+        response = self.client.post(
+            self.url,
+            {
+                "pattern": "(?R)",
+                "replacement": "x",
+                "columns": ["notes"],
+                "flags": [],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Recursive", response.data["message"])
+
+    def test_rejects_zero_width_matches_in_cell_values(self):
+        response = self.client.post(
+            self.url,
+            {
+                "pattern": "(?=Email)",
+                "replacement": "x",
+                "columns": ["notes"],
+                "flags": [],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("zero-width", response.data["message"])
+
     def test_returns_warning_when_no_matches_are_found(self):
         response = self.client.post(
             self.url,

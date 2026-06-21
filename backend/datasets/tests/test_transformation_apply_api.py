@@ -1,6 +1,7 @@
+import csv
 import shutil
 import tempfile
-from io import BytesIO
+from io import BytesIO, StringIO
 
 import pandas as pd
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -50,6 +51,8 @@ class TransformationApplyApiTests(APITestCase):
         self.assertEqual(response.data["match_count"], 3)
         self.assertEqual(response.data["affected_rows"], 2)
         self.assertEqual(response.data["provider"], "built-in")
+        self.assertEqual(response.data["result_columns"], ["name", "email", "notes"])
+        self.assertEqual(response.data["result_preview"][0]["email"], "[REDACTED]")
         self.assertEqual(TransformRun.objects.count(), 1)
         run = TransformRun.objects.get()
         self.assertTrue(run.result_file.name.endswith(".csv"))
@@ -78,6 +81,48 @@ class TransformationApplyApiTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["code"], "unsafe_transform")
         self.assertEqual(TransformRun.objects.count(), 0)
+
+    def test_does_not_count_identity_replacements_as_changed_cells(self):
+        self.payload.update(
+            {
+                "pattern": "Ada",
+                "replacement": "Ada",
+                "columns": ["name"],
+            }
+        )
+
+        response = self.client.post(self.url, self.payload, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["match_count"], 1)
+        self.assertEqual(response.data["affected_rows"], 0)
+        self.assertEqual(response.data["changed_cells"], 0)
+
+    def test_escapes_formula_prefixes_after_whitespace(self):
+        upload = SimpleUploadedFile(
+            "formulas.csv",
+            b"notes\n\" \t=2+2\"\n",
+            content_type="text/csv",
+        )
+        created_dataset = self.client.post(
+            "/api/datasets/",
+            {"file": upload},
+            format="multipart",
+        )
+        url = f"/api/datasets/{created_dataset.data['id']}/transforms/apply/"
+        payload = {
+            **self.payload,
+            "pattern": "not-present",
+            "replacement": "x",
+            "columns": ["notes"],
+        }
+
+        created_run = self.client.post(url, payload, format="json")
+        response = self.client.get(created_run.data["download_url"])
+        rows = list(csv.DictReader(StringIO(b"".join(response.streaming_content).decode())))
+
+        self.assertEqual(created_run.status_code, 201)
+        self.assertTrue(rows[0]["notes"].startswith("'"))
 
     def test_applies_and_downloads_excel_in_its_original_format(self):
         workbook = Workbook()

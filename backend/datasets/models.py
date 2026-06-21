@@ -83,6 +83,8 @@ class TransformRun(models.Model):
     affected_rows = models.PositiveBigIntegerField(default=0)
     changed_cells = models.PositiveBigIntegerField(default=0)
     warnings = models.JSONField(default=list)
+    result_columns = models.JSONField(default=list)
+    result_preview = models.JSONField(default=list)
     result_file = models.FileField(upload_to=transform_upload_path)
     output_format = models.CharField(max_length=8, choices=Dataset.Format.choices)
     created_at = models.DateTimeField(auto_now_add=True)

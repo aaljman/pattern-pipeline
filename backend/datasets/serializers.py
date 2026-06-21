@@ -99,6 +99,8 @@ class TransformRunSerializer(serializers.ModelSerializer):
             "affected_rows",
             "changed_cells",
             "warnings",
+            "result_columns",
+            "result_preview",
             "output_format",
             "download_url",
             "created_at",
