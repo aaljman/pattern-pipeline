@@ -97,7 +97,7 @@ class TemplateRegexProvider:
         (
             ("phone", "mobile"),
             RegexProposal(
-                pattern=r"(?<!\d)(?:\+?61|0)[2-478](?:[ -]?\d){8}(?!\d)",
+                pattern=r"(?<!\d)(?:\+?61[ -]?|0)[2-478](?:[ -]?\d){8}(?!\d)",
                 explanation="Matches common Australian landline and mobile phone formats.",
                 assumptions=["Phone numbers use Australian prefixes."],
                 positive_examples=["0412 345 678", "+61 412 345 678"],
