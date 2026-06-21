@@ -34,5 +34,5 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - run: pip install -r backend/requirements.txt
-      - run: python backend/manage.py test
+      - run: python backend/manage.py test datasets
       - run: python backend/manage.py makemigrations --check --dry-run

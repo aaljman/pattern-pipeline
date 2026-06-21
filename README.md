@@ -98,7 +98,7 @@ No uploaded cell values are included in model requests.
 ## Verification
 
 ```bash
-python backend/manage.py test
+python backend/manage.py test datasets
 python backend/manage.py makemigrations --check --dry-run
 
 cd frontend
