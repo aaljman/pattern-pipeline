@@ -158,3 +158,47 @@ class RegexGenerationApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 422)
         self.assertIn("safety gate", response.data["message"])
+
+    def test_rejects_examples_that_contradict_provider_pattern(self):
+        provider = SpyRegexProvider()
+        provider.generate = lambda instruction, columns: RegexProposal(
+            pattern=r"\d+",
+            explanation="Claims to match letters.",
+            positive_examples=["ABC"],
+            negative_examples=["123"],
+            confidence=0.9,
+        )
+        with patch(
+            "datasets.services.regex_generation.get_regex_provider",
+            return_value=provider,
+        ):
+            response = self.client.post(
+                self.url,
+                {"instruction": "Find codes", "columns": ["name"]},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("examples contradict", response.data["message"])
+
+    def test_built_in_routing_rejects_substrings_and_ambiguous_intents(self):
+        provider = TemplateRegexProvider()
+
+        with patch(
+            "datasets.services.regex_generation.get_regex_provider",
+            return_value=provider,
+        ):
+            substring = self.client.post(
+                self.url,
+                {"instruction": "Find microphone IDs", "columns": ["name"]},
+                format="json",
+            )
+            ambiguous = self.client.post(
+                self.url,
+                {"instruction": "Find URLs in email bodies", "columns": ["name"]},
+                format="json",
+            )
+
+        self.assertEqual(substring.status_code, 422)
+        self.assertEqual(ambiguous.status_code, 422)
+        self.assertIn("multiple", ambiguous.data["message"])

@@ -1,6 +1,8 @@
+import json
 import shutil
 import tempfile
 from io import BytesIO
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pandas as pd
@@ -11,6 +13,7 @@ from rest_framework.test import APITestCase
 from datasets.models import TransformRun
 from datasets.services.ai_transformations import (
     ExtractPlan,
+    OpenAIAiTransformProvider,
     StandardizePlan,
     TemplateAiTransformProvider,
 )
@@ -31,6 +34,21 @@ class SpyAiTransformProvider:
             mapping={"new south wales": "NSW"},
             explanation="Standardizes one state name.",
             confidence=0.9,
+        )
+
+
+class FakeResponsesClient:
+    def __init__(self):
+        self.requests = []
+
+    def parse(self, **kwargs):
+        self.requests.append(kwargs)
+        return SimpleNamespace(
+            output_parsed=StandardizePlan(
+                mapping={"new south wales": "NSW"},
+                explanation="Standardizes state names.",
+                confidence=0.9,
+            )
         )
 
 
@@ -86,6 +104,33 @@ class AiTransformationApiTests(APITestCase):
             ],
         )
         self.assertNotIn("New South Wales", str(provider.calls))
+
+    def test_openai_provider_sends_only_instruction_and_column_metadata(self):
+        responses = FakeResponsesClient()
+        provider = OpenAIAiTransformProvider(
+            client=SimpleNamespace(responses=responses),
+            model="test-model",
+        )
+
+        provider.generate(
+            "standardize_categories",
+            "Use Australian state abbreviations",
+            "state",
+        )
+
+        request = responses.requests[0]
+        self.assertEqual(request["model"], "test-model")
+        self.assertIs(request["text_format"], StandardizePlan)
+        self.assertFalse(request["store"])
+        self.assertEqual(
+            json.loads(request["input"]),
+            {
+                "operation": "standardize_categories",
+                "instruction": "Use Australian state abbreviations",
+                "selected_column_name": "state",
+            },
+        )
+        self.assertNotIn("New South Wales", request["input"])
 
     def test_previews_category_standardization_locally(self):
         plan = TemplateAiTransformProvider().generate(

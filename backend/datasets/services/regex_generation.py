@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from typing import Literal, Protocol
 
 from openai import OpenAI, OpenAIError
@@ -7,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from datasets.models import Dataset
 from datasets.services.transformations import (
+    REGEX_TIMEOUT_SECONDS,
     TransformationValidationError,
     compile_pattern,
     validate_columns,
@@ -133,9 +135,19 @@ class TemplateRegexProvider:
 
     def generate(self, instruction: str, column_names: list[str]) -> RegexProposal:
         lowered = instruction.lower()
+        matches = []
         for keywords, proposal in self.TEMPLATES:
-            if any(keyword in lowered for keyword in keywords):
-                return proposal.model_copy(deep=True)
+            if any(
+                re.search(rf"(?<!\w){re.escape(keyword)}(?:s|es)?(?!\w)", lowered)
+                for keyword in keywords
+            ):
+                matches.append(proposal)
+        if len(matches) == 1:
+            return matches[0].model_copy(deep=True)
+        if len(matches) > 1:
+            raise ProposalGenerationError(
+                "The request matches multiple built-in pattern types. Make it more specific."
+            )
         raise ProposalGenerationError(
             "No AI API key is configured and this request does not match a built-in pattern."
         )
@@ -163,11 +175,37 @@ def generate_regex_proposal(
     selected_provider = provider or get_regex_provider()
     proposal = selected_provider.generate(cleaned_instruction, columns)
     try:
-        compile_pattern(proposal.pattern, proposal.flags)
+        compiled = compile_pattern(proposal.pattern, proposal.flags)
     except TransformationValidationError as exc:
         raise ProposalGenerationError(
             f"The generated proposal did not pass the safety gate: {exc}"
         ) from exc
+
+    try:
+        invalid_positive = next(
+            (
+                example
+                for example in proposal.positive_examples
+                if compiled.search(example, timeout=REGEX_TIMEOUT_SECONDS) is None
+            ),
+            None,
+        )
+        invalid_negative = next(
+            (
+                example
+                for example in proposal.negative_examples
+                if compiled.search(example, timeout=REGEX_TIMEOUT_SECONDS) is not None
+            ),
+            None,
+        )
+    except (MemoryError, TimeoutError) as exc:
+        raise ProposalGenerationError(
+            "The generated examples could not be validated within the safety limits."
+        ) from exc
+    if invalid_positive is not None or invalid_negative is not None:
+        raise ProposalGenerationError(
+            "The generated examples contradict the proposed regular expression."
+        )
 
     return {
         **proposal.model_dump(),

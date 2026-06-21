@@ -41,7 +41,7 @@ BENCHMARK_CASES = [
 
 
 class BuiltInRegexBenchmarkTests(SimpleTestCase):
-    def test_common_pattern_library_scores_perfectly_on_32_intents(self):
+    def test_common_pattern_library_passes_32_case_smoke_set(self):
         provider = TemplateRegexProvider()
         true_positives = 0
         false_positives = 0
