@@ -103,6 +103,7 @@ python backend/manage.py makemigrations --check --dry-run
 
 cd frontend
 pnpm lint
+pnpm test
 pnpm build
 ```
 
