@@ -15,6 +15,7 @@ coverage/
 .env
 .env.local
 media/
+backend/staticfiles/
 tmp/
 
 .DS_Store

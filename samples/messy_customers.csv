@@ -1,0 +1,5 @@
+customer_id,name,state,email,notes
+C-001,Ada Lovelace,New South Wales,ada@example.com,Primary email ada@example.com
+C-002,Lin Chen,N.S.W.,lin.chen@example.org,Call after 4pm
+C-003,Grace Hopper,Victoria,grace@navy.example,Backup is grace.hopper@example.com
+C-004,Sam Rivera,VIC,sam.rivera@example.net,No contact preference
