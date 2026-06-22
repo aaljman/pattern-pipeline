@@ -13,6 +13,7 @@ from rest_framework.test import APITestCase
 from datasets.models import TransformRun
 from datasets.services.ai_transformations import (
     ExtractPlan,
+    GeminiAiTransformProvider,
     OpenAIAiTransformProvider,
     StandardizePlan,
     TemplateAiTransformProvider,
@@ -49,6 +50,21 @@ class FakeResponsesClient:
                 explanation="Standardizes state names.",
                 confidence=0.9,
             )
+        )
+
+
+class FakeGeminiModels:
+    def __init__(self):
+        self.requests = []
+
+    def generate_content(self, **kwargs):
+        self.requests.append(kwargs)
+        return SimpleNamespace(
+            text=StandardizePlan(
+                mapping={"new south wales": "NSW"},
+                explanation="Standardizes state names.",
+                confidence=0.9,
+            ).model_dump_json()
         )
 
 
@@ -131,6 +147,36 @@ class AiTransformationApiTests(APITestCase):
             },
         )
         self.assertNotIn("New South Wales", request["input"])
+
+    def test_gemini_provider_sends_only_instruction_and_column_metadata(self):
+        models = FakeGeminiModels()
+        provider = GeminiAiTransformProvider(
+            client=SimpleNamespace(models=models),
+            model="gemini-test-model",
+        )
+
+        provider.generate(
+            "standardize_categories",
+            "Use Australian state abbreviations",
+            "state",
+        )
+
+        request = models.requests[0]
+        self.assertEqual(request["model"], "gemini-test-model")
+        self.assertEqual(
+            json.loads(request["contents"]),
+            {
+                "operation": "standardize_categories",
+                "instruction": "Use Australian state abbreviations",
+                "selected_column_name": "state",
+            },
+        )
+        self.assertEqual(request["config"]["response_mime_type"], "application/json")
+        self.assertEqual(
+            request["config"]["response_json_schema"],
+            StandardizePlan.model_json_schema(),
+        )
+        self.assertNotIn("New South Wales", request["contents"])
 
     def test_previews_category_standardization_locally(self):
         plan = TemplateAiTransformProvider().generate(

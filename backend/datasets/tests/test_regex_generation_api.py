@@ -9,6 +9,7 @@ from django.test import override_settings
 from rest_framework.test import APITestCase
 
 from datasets.services.regex_generation import (
+    GeminiRegexProvider,
     OpenAIRegexProvider,
     RegexProposal,
     TemplateRegexProvider,
@@ -45,6 +46,21 @@ class FakeResponsesClient:
                 explanation="Matches a three-letter uppercase code.",
                 confidence=0.9,
             )
+        )
+
+
+class FakeGeminiModels:
+    def __init__(self):
+        self.requests = []
+
+    def generate_content(self, **kwargs):
+        self.requests.append(kwargs)
+        return SimpleNamespace(
+            text=RegexProposal(
+                pattern=r"\b[A-Z]{3}\b",
+                explanation="Matches a three-letter uppercase code.",
+                confidence=0.9,
+            ).model_dump_json()
         )
 
 
@@ -108,6 +124,33 @@ class RegexGenerationApiTests(APITestCase):
         )
         self.assertNotIn("Ada", request["input"])
         self.assertNotIn("ada@example.com", request["input"])
+
+    def test_gemini_provider_sends_only_instruction_and_column_metadata(self):
+        models = FakeGeminiModels()
+        provider = GeminiRegexProvider(
+            client=SimpleNamespace(models=models),
+            model="gemini-test-model",
+        )
+
+        provider.generate("Find customer codes", ["name"])
+
+        request = models.requests[0]
+        self.assertEqual(request["model"], "gemini-test-model")
+        self.assertEqual(
+            json.loads(request["contents"]),
+            {
+                "instruction": "Find customer codes",
+                "selected_column_names": ["name"],
+                "allowed_flags": ["IGNORECASE", "MULTILINE"],
+            },
+        )
+        self.assertEqual(request["config"]["response_mime_type"], "application/json")
+        self.assertEqual(
+            request["config"]["response_json_schema"],
+            RegexProposal.model_json_schema(),
+        )
+        self.assertNotIn("Ada", request["contents"])
+        self.assertNotIn("ada@example.com", request["contents"])
 
     def test_uses_built_in_email_fallback(self):
         with patch(

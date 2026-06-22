@@ -20,8 +20,10 @@ to a separate CSV or XLSX artifact.
 
 The deployed application remains usable without an API key for common email,
 phone, URL, IP address, Australian-state, boolean, name, and email-extraction
-requests. When `OPENAI_API_KEY` is configured it uses schema-constrained OpenAI
-Responses for arbitrary requests.
+requests. With `GEMINI_API_KEY` configured, it uses Gemini 3.5 Flash structured
+output for requests beyond the built-in pattern library. OpenAI remains an
+optional provider and is never selected while a Gemini key is available in
+`auto` mode.
 
 ## Product decisions
 
@@ -92,8 +94,23 @@ python backend/manage.py runserver
 
 Open `http://localhost:5173`. Vite proxies `/api` to Django on port 8000.
 
-Copy `.env.example` to `.env` to configure an OpenAI key or production settings.
-No uploaded cell values are included in model requests.
+Copy `.env.example` to `.env` to configure a provider or production settings. No
+uploaded cell values are included in model requests.
+
+### AI provider selection
+
+Set `AI_PROVIDER` to one of:
+
+| Value | Behaviour |
+| --- | --- |
+| `auto` | Use Gemini when `GEMINI_API_KEY` exists, otherwise OpenAI when `OPENAI_API_KEY` exists, otherwise built-in plans |
+| `gemini` | Require Gemini and fail clearly when its key is missing |
+| `openai` | Require OpenAI and fail clearly when its key is missing |
+| `built-in` | Make no external model calls |
+
+The default Gemini model is `gemini-3.5-flash`. To guarantee that this project
+cannot incur OpenAI usage, leave `OPENAI_API_KEY` blank. Provider errors are
+returned to the user and never trigger a silent fallback to another paid API.
 
 ## Verification
 
@@ -128,9 +145,30 @@ the configured database so stateless container restarts do not break active runs
 For a larger or longer-lived service, replace this demo storage backend with
 object storage.
 
-The included [`render.yaml`](render.yaml) provisions a Docker web service and
-PostgreSQL database. Configure `OPENAI_API_KEY` in the Render dashboard; the
-built-in plans remain available if it is omitted.
+### Zero-cost Render deployment
+
+The included [`render.yaml`](render.yaml) provisions a **Free** Docker web
+service and **Free** PostgreSQL database inside a Render Hobby workspace. In the
+Render dashboard, set `GEMINI_API_KEY`, leave `AI_PROVIDER=auto`, and leave
+`OPENAI_API_KEY` empty. The app stores demo artifacts in PostgreSQL, so no paid
+persistent disk is required.
+
+This is appropriate for a take-home demo, with deliberate free-tier constraints:
+
+- Render's free web service sleeps after 15 minutes without traffic, so the first
+  request after inactivity can be slow.
+- A free Render Postgres database expires after 30 days. Deploy close to the
+  review date or replace the database before it expires.
+- Gemini API free-tier quotas are limited and project-specific. Check the active
+  quota in Google AI Studio before the demo.
+- Google states that free-tier Gemini API content may be used to improve its
+  products. Pattern Pipeline sends the instruction and column names, never
+  uploaded dataset rows, but the demo should still use synthetic data.
+
+See the official [Render pricing](https://render.com/pricing),
+[Render free-tier notes](https://render.com/docs/faq),
+[Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing), and
+[Gemini rate limits](https://ai.google.dev/gemini-api/docs/rate-limits).
 
 ## API summary
 
