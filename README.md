@@ -5,9 +5,14 @@ Rhombus AI engineering exercise. It converts natural-language requests into
 inspectable plans, previews every affected value, and writes approved changes
 to a separate CSV or XLSX artifact.
 
-> Live URL: add after deployment
->
-> Demo video: add after recording
+> **Live URL:** https://pattern-pipeline.onrender.com/
+> (free tier — the first request after idle can take ~30s to wake)
+
+## Demo
+
+https://github.com/aaljman/pattern-pipeline/raw/master/demo.mp4
+
+If the player does not load, [download the walkthrough](demo.mp4) (2 minutes).
 
 ## What to try
 
