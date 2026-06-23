@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
+from google.genai import types as genai_types
 from rest_framework.test import APITestCase
 
 from datasets.services.regex_generation import (
@@ -148,6 +149,10 @@ class RegexGenerationApiTests(APITestCase):
         self.assertEqual(
             request["config"]["response_json_schema"],
             RegexProposal.model_json_schema(),
+        )
+        self.assertEqual(
+            request["config"]["thinking_config"].thinking_level,
+            genai_types.ThinkingLevel.MINIMAL,
         )
         self.assertNotIn("Ada", request["contents"])
         self.assertNotIn("ada@example.com", request["contents"])

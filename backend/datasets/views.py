@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from django.core.cache import cache
 from django.db import connection
 from django.http import FileResponse
 from django.utils import timezone
@@ -26,6 +27,7 @@ from .services.ai_transformations import (
     generate_ai_transform_plan,
     preview_ai_transformation,
 )
+from .services.cleanup import purge_expired_datasets
 from .services.ingestion import DatasetValidationError, ingest_dataset
 from .services.regex_generation import ProposalGenerationError, generate_regex_proposal
 from .services.transformations import (
@@ -34,6 +36,9 @@ from .services.transformations import (
     apply_transformation,
     preview_transformation,
 )
+
+PURGE_CACHE_KEY = "datasets:expired-purge:v1"
+PURGE_INTERVAL_SECONDS = 60 * 60
 
 
 @api_view(["GET"])
@@ -56,6 +61,11 @@ class PrivateAPIView(APIView):
         response = super().finalize_response(request, response, *args, **kwargs)
         response["Cache-Control"] = "no-store, private"
         return response
+
+
+def purge_expired_datasets_if_due():
+    if cache.add(PURGE_CACHE_KEY, "1", timeout=PURGE_INTERVAL_SECONDS):
+        purge_expired_datasets()
 
 
 def get_dataset_or_error(dataset_id):
@@ -95,6 +105,8 @@ class DatasetListCreateView(PrivateAPIView):
     throttle_scope = "upload"
 
     def post(self, request):
+        purge_expired_datasets_if_due()
+
         upload = request.FILES.get("file")
         if upload is None:
             return Response(

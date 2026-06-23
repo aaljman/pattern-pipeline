@@ -118,6 +118,9 @@ class GeminiAiTransformProvider:
                     ),
                     "response_mime_type": "application/json",
                     "response_json_schema": output_type.model_json_schema(),
+                    "thinking_config": genai_types.ThinkingConfig(
+                        thinking_level="minimal"
+                    ),
                     "max_output_tokens": 1_500,
                 },
             )

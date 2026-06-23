@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pandas as pd
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
+from google.genai import types as genai_types
 from rest_framework.test import APITestCase
 
 from datasets.models import TransformRun
@@ -175,6 +176,10 @@ class AiTransformationApiTests(APITestCase):
         self.assertEqual(
             request["config"]["response_json_schema"],
             StandardizePlan.model_json_schema(),
+        )
+        self.assertEqual(
+            request["config"]["thinking_config"].thinking_level,
+            genai_types.ThinkingLevel.MINIMAL,
         )
         self.assertNotIn("New South Wales", request["contents"])
 

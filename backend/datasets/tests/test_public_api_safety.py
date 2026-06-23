@@ -11,6 +11,7 @@ from rest_framework.test import APITestCase
 from rest_framework.throttling import ScopedRateThrottle
 
 from datasets.models import Dataset, TransformRun
+from datasets.views import PURGE_CACHE_KEY
 
 
 class PublicApiSafetyTests(APITestCase):
@@ -79,3 +80,18 @@ class PublicApiSafetyTests(APITestCase):
 
         self.assertEqual(first.status_code, 201)
         self.assertEqual(second.status_code, 429)
+
+    def test_upload_opportunistically_purges_expired_artifacts(self):
+        expired = self.upload("expired.csv")
+        dataset = Dataset.objects.get(id=expired.data["id"])
+        source_name = dataset.source_file.name
+        Dataset.objects.filter(id=dataset.id).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        cache.delete(PURGE_CACHE_KEY)
+
+        fresh = self.upload("fresh.csv")
+
+        self.assertEqual(fresh.status_code, 201)
+        self.assertFalse(Dataset.objects.filter(id=dataset.id).exists())
+        self.assertFalse(dataset.source_file.storage.exists(source_name))

@@ -145,30 +145,13 @@ the configured database so stateless container restarts do not break active runs
 For a larger or longer-lived service, replace this demo storage backend with
 object storage.
 
-### Zero-cost Render deployment
+### Render deployment
 
-The included [`render.yaml`](render.yaml) provisions a **Free** Docker web
-service and **Free** PostgreSQL database inside a Render Hobby workspace. In the
-Render dashboard, set `GEMINI_API_KEY`, leave `AI_PROVIDER=auto`, and leave
-`OPENAI_API_KEY` empty. The app stores demo artifacts in PostgreSQL, so no paid
-persistent disk is required.
-
-This is appropriate for a take-home demo, with deliberate free-tier constraints:
-
-- Render's free web service sleeps after 15 minutes without traffic, so the first
-  request after inactivity can be slow.
-- A free Render Postgres database expires after 30 days. Deploy close to the
-  review date or replace the database before it expires.
-- Gemini API free-tier quotas are limited and project-specific. Check the active
-  quota in Google AI Studio before the demo.
-- Google states that free-tier Gemini API content may be used to improve its
-  products. Pattern Pipeline sends the instruction and column names, never
-  uploaded dataset rows, but the demo should still use synthetic data.
-
-See the official [Render pricing](https://render.com/pricing),
-[Render free-tier notes](https://render.com/docs/faq),
-[Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing), and
-[Gemini rate limits](https://ai.google.dev/gemini-api/docs/rate-limits).
+The included [`render.yaml`](render.yaml) provisions a Docker web service and
+PostgreSQL database. In the Render dashboard, set `GEMINI_API_KEY`, leave
+`AI_PROVIDER=auto`, and optionally configure `OPENAI_API_KEY` if you want to
+switch providers. The app stores short-lived demo artifacts in PostgreSQL, so a
+persistent disk is not required for the reviewer workflow.
 
 ## API summary
 

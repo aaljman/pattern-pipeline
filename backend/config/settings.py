@@ -75,6 +75,14 @@ DATABASES = {
     )
 }
 
+if not DEBUG:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "api_cache",
+        }
+    }
+
 AUTH_PASSWORD_VALIDATORS = []
 LANGUAGE_CODE = "en-au"
 TIME_ZONE = "Australia/Sydney"
@@ -124,6 +132,7 @@ if not DEBUG:
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_PARSER_CLASSES": ["rest_framework.parsers.JSONParser"],
+    "NUM_PROXIES": int(os.environ.get("DRF_NUM_PROXIES", "1")),
     "DEFAULT_THROTTLE_RATES": {
         "upload": "20/hour",
         "generation": "30/hour",

@@ -28,4 +28,4 @@ RUN useradd --create-home --uid 10001 appuser \
 
 EXPOSE 8000
 USER appuser
-CMD ["/bin/sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120 --access-logfile - --error-logfile -"]
+CMD ["/bin/sh", "-c", "python manage.py migrate --noinput && (python manage.py createcachetable --verbosity 0 || true) && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120 --access-logfile - --error-logfile -"]
