@@ -10,7 +10,8 @@ to a separate CSV or XLSX artifact.
 
 ## Demo
 
-<video src="https://github.com/aaljman/pattern-pipeline/raw/master/demo.mp4" controls muted width="100%"></video>
+
+https://github.com/user-attachments/assets/059ea975-b35a-4b45-9535-cdbc47a78ce8
 
 If the player does not load, [watch/download the walkthrough](demo.mp4) (2 minutes).
 
