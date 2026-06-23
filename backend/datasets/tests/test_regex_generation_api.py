@@ -167,6 +167,43 @@ class RegexGenerationApiTests(APITestCase):
         self.assertNotIn("Ada", request["contents"])
         self.assertNotIn("ada@example.com", request["contents"])
 
+    def test_gemini_parses_json_even_with_trailing_markdown_fence(self):
+        class FakeFencedModels:
+            def __init__(self):
+                self.requests = []
+
+            def generate_content(self, **kwargs):
+                self.requests.append(kwargs)
+                # gemma-family models leak a trailing fence even in JSON mode.
+                return SimpleNamespace(
+                    text=(
+                        '{"pattern": "\\\\b[A-Z]{3}\\\\b", '
+                        '"explanation": "Three-letter uppercase code.", '
+                        '"confidence": 0.8}\n```'
+                    )
+                )
+
+        models = FakeFencedModels()
+        provider = GeminiRegexProvider(
+            client=SimpleNamespace(models=models),
+            model="gemma-4-31b-it",
+        )
+
+        proposal = provider.generate("Find customer codes", ["name"])
+
+        request = models.requests[0]
+        # All models keep the structured-output config and minimal thinking.
+        self.assertEqual(
+            request["config"]["response_json_schema"],
+            RegexProposal.model_json_schema(),
+        )
+        self.assertEqual(
+            request["config"]["thinking_config"].thinking_level,
+            genai_types.ThinkingLevel.MINIMAL,
+        )
+        self.assertEqual(proposal.pattern, r"\b[A-Z]{3}\b")
+        self.assertEqual(proposal.confidence, 0.8)
+
     def test_uses_built_in_email_fallback(self):
         with patch(
             "datasets.services.regex_generation.get_regex_provider",

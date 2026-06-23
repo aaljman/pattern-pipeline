@@ -1,9 +1,10 @@
+import json
 import os
 from typing import Literal
 
 
 ProviderName = Literal["gemini", "openai", "built-in"]
-DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+DEFAULT_GEMINI_MODEL = "gemma-4-31b-it"
 DEFAULT_GEMINI_TIMEOUT_MS = 60_000
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 
@@ -14,6 +15,16 @@ class ProviderConfigurationError(RuntimeError):
 
 def _has_api_key(name: str) -> bool:
     return bool(os.environ.get(name, "").strip())
+
+
+def parse_json_object(text: str) -> dict:
+    """Extract a single JSON object from a model reply that may wrap it in
+    markdown fences or surrounding prose."""
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        raise ValueError("The model response did not contain a JSON object.")
+    return json.loads(text[start : end + 1])
 
 
 def get_gemini_timeout_ms() -> int:

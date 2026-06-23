@@ -20,10 +20,11 @@ to a separate CSV or XLSX artifact.
 
 The deployed application remains usable without an API key for common email,
 phone, URL, IP address, Australian-state, boolean, name, and email-extraction
-requests. With `GEMINI_API_KEY` configured, it uses Gemini 3.5 Flash structured
-output for requests beyond the built-in pattern library. OpenAI remains an
-optional provider and is never selected while a Gemini key is available in
-`auto` mode.
+requests. With `GEMINI_API_KEY` configured, it calls a Gemini-family model
+(default `gemma-4-31b-it`) for requests beyond the built-in pattern library. In
+`auto` mode the AI provider runs first and the built-in library is only used as a
+fallback when the model fails. OpenAI remains an optional provider and is never
+selected while a Gemini key is available in `auto` mode.
 
 ## Product decisions
 
@@ -108,9 +109,12 @@ Set `AI_PROVIDER` to one of:
 | `openai` | Require OpenAI and fail clearly when its key is missing |
 | `built-in` | Make no external model calls |
 
-The default Gemini model is `gemini-3.5-flash`. To guarantee that this project
-cannot incur OpenAI usage, leave `OPENAI_API_KEY` blank. Provider errors are
-returned to the user and never trigger a silent fallback to another paid API.
+The default model is `gemma-4-31b-it`, set via `GEMINI_MODEL` (any Gemini- or
+Gemma-family id the key can access works; Gemma ids automatically use a
+prompt-only request path since they do not support structured-output config). To
+guarantee that this project cannot incur OpenAI usage, leave `OPENAI_API_KEY`
+blank. A failed model call never triggers a silent fallback to another paid API;
+in `auto` mode it falls back only to the free built-in pattern library.
 
 ## Verification
 
