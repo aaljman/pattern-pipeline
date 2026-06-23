@@ -10,9 +10,9 @@ to a separate CSV or XLSX artifact.
 
 ## Demo
 
-https://github.com/aaljman/pattern-pipeline/raw/master/demo.mp4
+<video src="https://github.com/aaljman/pattern-pipeline/raw/master/demo.mp4" controls muted width="100%"></video>
 
-If the player does not load, [download the walkthrough](demo.mp4) (2 minutes).
+If the player does not load, [watch/download the walkthrough](demo.mp4) (2 minutes).
 
 ## What to try
 
