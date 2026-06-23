@@ -16,6 +16,7 @@ from datasets.services.provider_selection import (
     DEFAULT_GEMINI_MODEL,
     DEFAULT_OPENAI_MODEL,
     ProviderConfigurationError,
+    get_gemini_timeout_ms,
     select_provider_name,
 )
 from datasets.services.regex_generation import ProposalGenerationError
@@ -97,7 +98,7 @@ class GeminiAiTransformProvider:
     def __init__(self, client=None, model: str | None = None):
         self.client = client or genai.Client(
             api_key=os.environ.get("GEMINI_API_KEY"),
-            http_options=genai_types.HttpOptions(timeout=20_000),
+            http_options=genai_types.HttpOptions(timeout=get_gemini_timeout_ms()),
         )
         self.model = model or os.environ.get("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
 

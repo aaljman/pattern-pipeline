@@ -4,6 +4,7 @@ from typing import Literal
 
 ProviderName = Literal["gemini", "openai", "built-in"]
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+DEFAULT_GEMINI_TIMEOUT_MS = 60_000
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 
 
@@ -13,6 +14,19 @@ class ProviderConfigurationError(RuntimeError):
 
 def _has_api_key(name: str) -> bool:
     return bool(os.environ.get(name, "").strip())
+
+
+def get_gemini_timeout_ms() -> int:
+    raw_value = os.environ.get("GEMINI_TIMEOUT_MS", str(DEFAULT_GEMINI_TIMEOUT_MS))
+    try:
+        timeout_ms = int(raw_value)
+    except ValueError as exc:
+        raise ProviderConfigurationError("GEMINI_TIMEOUT_MS must be an integer.") from exc
+    if timeout_ms < 1_000 or timeout_ms > 120_000:
+        raise ProviderConfigurationError(
+            "GEMINI_TIMEOUT_MS must be between 1000 and 120000."
+        )
+    return timeout_ms
 
 
 def select_provider_name() -> ProviderName:

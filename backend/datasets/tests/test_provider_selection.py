@@ -4,7 +4,9 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 
 from datasets.services.provider_selection import (
+    DEFAULT_GEMINI_TIMEOUT_MS,
     ProviderConfigurationError,
+    get_gemini_timeout_ms,
     select_provider_name,
 )
 
@@ -65,3 +67,16 @@ class ProviderSelectionTests(SimpleTestCase):
             clear=True,
         ):
             self.assertEqual(select_provider_name(), "built-in")
+
+    def test_gemini_timeout_defaults_and_reads_env(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(get_gemini_timeout_ms(), DEFAULT_GEMINI_TIMEOUT_MS)
+        with patch.dict(os.environ, {"GEMINI_TIMEOUT_MS": "45000"}, clear=True):
+            self.assertEqual(get_gemini_timeout_ms(), 45_000)
+
+    def test_gemini_timeout_rejects_invalid_values(self):
+        for value in ["abc", "999", "120001"]:
+            with self.subTest(value=value):
+                with patch.dict(os.environ, {"GEMINI_TIMEOUT_MS": value}, clear=True):
+                    with self.assertRaises(ProviderConfigurationError):
+                        get_gemini_timeout_ms()
