@@ -182,7 +182,36 @@ class RegexGenerationApiTests(APITestCase):
         self.assertEqual(response.data["provider"], "built-in")
         self.assertIn("@", response.data["positive_examples"][0])
 
-    def test_auto_uses_simple_built_in_pattern_before_external_provider(self):
+    def test_auto_uses_external_provider_before_built_in_when_configured(self):
+        provider = SpyRegexProvider()
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AI_PROVIDER": "auto",
+                    "GEMINI_API_KEY": "configured",
+                    "OPENAI_API_KEY": "",
+                },
+            ),
+            patch(
+                "datasets.services.regex_generation.get_regex_provider",
+                return_value=provider,
+            ),
+        ):
+            response = self.client.post(
+                self.url,
+                {"instruction": "Find email addresses", "columns": ["email"]},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["provider"], "spy")
+        self.assertEqual(
+            provider.calls,
+            [{"instruction": "Find email addresses", "column_names": ["email"]}],
+        )
+
+    def test_auto_falls_back_to_simple_built_in_pattern_when_external_fails(self):
         with (
             patch.dict(
                 os.environ,

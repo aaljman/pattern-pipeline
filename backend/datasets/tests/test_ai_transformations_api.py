@@ -34,6 +34,13 @@ class SpyAiTransformProvider:
         self.calls.append(
             {"operation": operation, "instruction": instruction, "column": column}
         )
+        if operation == "extract_fields":
+            return ExtractPlan(
+                pattern=r"^\s*(?P<first_name>[^\s]+)\s+(?P<last_name>.+?)\s*$",
+                fields=["first_name", "last_name"],
+                explanation="Extracts first and last names.",
+                confidence=0.9,
+            )
         return StandardizePlan(
             mapping={"new south wales": "NSW"},
             explanation="Standardizes one state name.",
@@ -216,7 +223,46 @@ class AiTransformationApiTests(APITestCase):
         self.assertEqual(response.data["affected_rows"], 3)
         self.assertEqual(response.data["preview"][0]["after"], "NSW")
 
-    def test_auto_uses_simple_built_in_plan_before_external_provider(self):
+    def test_auto_uses_external_provider_before_built_in_when_configured(self):
+        provider = SpyAiTransformProvider()
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AI_PROVIDER": "auto",
+                    "GEMINI_API_KEY": "configured",
+                    "OPENAI_API_KEY": "",
+                },
+            ),
+            patch(
+                "datasets.services.ai_transformations.get_ai_transform_provider",
+                return_value=provider,
+            ),
+        ):
+            response = self.client.post(
+                f"{self.base_url}/generate/",
+                {
+                    "operation": "standardize_categories",
+                    "instruction": "Use Australian state abbreviations",
+                    "column": "state",
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["provider"], "spy")
+        self.assertEqual(
+            provider.calls,
+            [
+                {
+                    "operation": "standardize_categories",
+                    "instruction": "Use Australian state abbreviations",
+                    "column": "state",
+                }
+            ],
+        )
+
+    def test_auto_falls_back_to_simple_built_in_plan_when_external_fails(self):
         with patch.dict(
             os.environ,
             {
@@ -241,6 +287,76 @@ class AiTransformationApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["provider"], "built-in")
         self.assertEqual(response.data["data_rows_sent"], 0)
+
+    def test_auto_uses_external_provider_for_name_request_on_non_name_column(self):
+        provider = SpyAiTransformProvider()
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AI_PROVIDER": "auto",
+                    "GEMINI_API_KEY": "configured",
+                    "OPENAI_API_KEY": "",
+                },
+            ),
+            patch(
+                "datasets.services.ai_transformations.get_ai_transform_provider",
+                return_value=provider,
+            ),
+        ):
+            response = self.client.post(
+                f"{self.base_url}/generate/",
+                {
+                    "operation": "extract_fields",
+                    "instruction": "Split the names into first and last name",
+                    "column": "email",
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["provider"], "spy")
+        self.assertEqual(
+            provider.calls,
+            [
+                {
+                    "operation": "extract_fields",
+                    "instruction": "Split the names into first and last name",
+                    "column": "email",
+                }
+            ],
+        )
+
+    def test_auto_does_not_generic_fallback_for_refined_name_request(self):
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AI_PROVIDER": "auto",
+                    "GEMINI_API_KEY": "configured",
+                    "OPENAI_API_KEY": "",
+                },
+            ),
+            patch(
+                "datasets.services.ai_transformations.get_ai_transform_provider",
+                return_value=FailingAiTransformProvider(),
+            ),
+        ):
+            response = self.client.post(
+                f"{self.base_url}/generate/",
+                {
+                    "operation": "extract_fields",
+                    "instruction": (
+                        "Split the names into first and last name and names that are not English"
+                    ),
+                    "column": "name",
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.data["code"], "generation_failed")
+        self.assertIn("External provider", response.data["message"])
 
     def test_applies_category_standardization_and_exports_result(self):
         response = self.client.post(

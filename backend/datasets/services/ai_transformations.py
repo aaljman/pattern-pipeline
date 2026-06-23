@@ -185,11 +185,34 @@ class OpenAIAiTransformProvider:
 class TemplateAiTransformProvider:
     name = "built-in"
     model = "optional-transforms-v1"
+    REFINED_INTENT_TERMS = (
+        "except",
+        "exclude",
+        "excluding",
+        "language",
+        "non-english",
+        "non english",
+        "not english",
+        "only",
+        "that",
+        "where",
+        "which",
+        "whose",
+    )
+
+    def has_refined_intent(self, lowered: str) -> bool:
+        return any(term in lowered for term in self.REFINED_INTENT_TERMS)
 
     def generate(self, operation: Operation, instruction: str, column: str):
         lowered = instruction.lower()
+        column_lowered = column.lower()
+        refined_intent = self.has_refined_intent(lowered)
         if operation == "standardize_categories":
-            if "state" in lowered or "austral" in lowered:
+            if (
+                not refined_intent
+                and ("state" in column_lowered or "territory" in column_lowered)
+                and ("state" in lowered or "austral" in lowered)
+            ):
                 return StandardizePlan(
                     mapping={
                         "new south wales": "NSW",
@@ -208,7 +231,14 @@ class TemplateAiTransformProvider:
                     explanation="Standardizes Australian state and territory names to abbreviations.",
                     confidence=0.94,
                 )
-            if "yes" in lowered or "boolean" in lowered:
+            if (
+                not refined_intent
+                and any(
+                    term in column_lowered
+                    for term in ["active", "enabled", "flag", "opt_in", "subscribed"]
+                )
+                and ("yes" in lowered or "boolean" in lowered)
+            ):
                 return StandardizePlan(
                     mapping={
                         "yes": "Yes",
@@ -221,14 +251,22 @@ class TemplateAiTransformProvider:
                     explanation="Standardizes common boolean variants to Yes or No.",
                     confidence=0.9,
                 )
-        elif "name" in lowered:
+        elif (
+            not refined_intent
+            and "name" in column_lowered
+            and ("name" in lowered or "first" in lowered or "last" in lowered)
+        ):
             return ExtractPlan(
                 pattern=r"^\s*(?P<first_name>[^\s]+)\s+(?P<last_name>.+?)\s*$",
                 fields=["first_name", "last_name"],
                 explanation="Extracts the first token as first name and the remainder as last name.",
                 confidence=0.82,
             )
-        elif "email" in lowered:
+        elif (
+            not refined_intent
+            and "email" in column_lowered
+            and "email" in lowered
+        ):
             return ExtractPlan(
                 pattern=(
                     r"\b(?P<email_local>[A-Za-z0-9._%+-]+)@"
@@ -273,11 +311,10 @@ def generate_ai_transform_plan(
         raise ProposalGenerationError("Describe the transformation you want to perform.")
 
     if provider is None and is_auto_mode():
-        selected_provider = TemplateAiTransformProvider()
-        try:
+        selected_provider = get_ai_transform_provider()
+        if selected_provider.name == "built-in":
             plan = selected_provider.generate(operation, cleaned_instruction, column)
-        except BuiltInPlanNotFound:
-            selected_provider = get_ai_transform_provider()
+        else:
             try:
                 plan = selected_provider.generate(operation, cleaned_instruction, column)
             except ProposalGenerationError as external_exc:

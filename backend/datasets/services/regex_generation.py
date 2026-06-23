@@ -277,11 +277,10 @@ def generate_regex_proposal(
         raise ProposalGenerationError("Pattern descriptions must be 1,000 characters or fewer.")
 
     if provider is None and is_auto_mode():
-        selected_provider = TemplateRegexProvider()
-        try:
+        selected_provider = get_regex_provider()
+        if selected_provider.name == "built-in":
             proposal = selected_provider.generate(cleaned_instruction, columns)
-        except BuiltInPatternNotFound:
-            selected_provider = get_regex_provider()
+        else:
             try:
                 proposal = selected_provider.generate(cleaned_instruction, columns)
             except ProposalGenerationError as external_exc:
