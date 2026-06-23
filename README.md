@@ -103,7 +103,7 @@ Set `AI_PROVIDER` to one of:
 
 | Value | Behaviour |
 | --- | --- |
-| `auto` | Use Gemini when `GEMINI_API_KEY` exists, otherwise OpenAI when `OPENAI_API_KEY` exists, otherwise built-in plans |
+| `auto` | Use built-in plans immediately for simple known requests; otherwise use Gemini when `GEMINI_API_KEY` exists, otherwise OpenAI when `OPENAI_API_KEY` exists; provider failures fall back to built-in plans only when the request is still simple enough |
 | `gemini` | Require Gemini and fail clearly when its key is missing |
 | `openai` | Require OpenAI and fail clearly when its key is missing |
 | `built-in` | Make no external model calls |

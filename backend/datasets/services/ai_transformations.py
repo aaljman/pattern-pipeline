@@ -34,6 +34,10 @@ Operation = Literal["standardize_categories", "extract_fields"]
 PREVIEW_LIMIT = 20
 
 
+class BuiltInPlanNotFound(ProposalGenerationError):
+    pass
+
+
 class StandardizePlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -234,7 +238,7 @@ class TemplateAiTransformProvider:
                 confidence=0.94,
             )
 
-        raise ProposalGenerationError(
+        raise BuiltInPlanNotFound(
             "No AI API key is configured and this request does not match a built-in optional plan."
         )
 
@@ -251,6 +255,10 @@ def get_ai_transform_provider() -> AiTransformProvider:
     return TemplateAiTransformProvider()
 
 
+def is_auto_mode() -> bool:
+    return os.environ.get("AI_PROVIDER", "auto").strip().lower() == "auto"
+
+
 def generate_ai_transform_plan(
     dataset: Dataset,
     operation: Operation,
@@ -263,8 +271,23 @@ def generate_ai_transform_plan(
     if not cleaned_instruction:
         raise ProposalGenerationError("Describe the transformation you want to perform.")
 
-    selected_provider = provider or get_ai_transform_provider()
-    plan = selected_provider.generate(operation, cleaned_instruction, column)
+    if provider is None and is_auto_mode():
+        selected_provider = TemplateAiTransformProvider()
+        try:
+            plan = selected_provider.generate(operation, cleaned_instruction, column)
+        except BuiltInPlanNotFound:
+            selected_provider = get_ai_transform_provider()
+            try:
+                plan = selected_provider.generate(operation, cleaned_instruction, column)
+            except ProposalGenerationError as external_exc:
+                selected_provider = TemplateAiTransformProvider()
+                try:
+                    plan = selected_provider.generate(operation, cleaned_instruction, column)
+                except BuiltInPlanNotFound:
+                    raise external_exc
+    else:
+        selected_provider = provider or get_ai_transform_provider()
+        plan = selected_provider.generate(operation, cleaned_instruction, column)
     if plan.operation != operation:
         raise ProposalGenerationError("The AI provider returned the wrong transformation type.")
 

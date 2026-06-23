@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import tempfile
 from io import BytesIO
@@ -19,6 +20,7 @@ from datasets.services.ai_transformations import (
     StandardizePlan,
     TemplateAiTransformProvider,
 )
+from datasets.services.regex_generation import ProposalGenerationError
 
 
 class SpyAiTransformProvider:
@@ -37,6 +39,14 @@ class SpyAiTransformProvider:
             explanation="Standardizes one state name.",
             confidence=0.9,
         )
+
+
+class FailingAiTransformProvider:
+    name = "gemini"
+    model = "test-model"
+
+    def generate(self, operation, instruction, column):
+        raise ProposalGenerationError("External provider is temporarily unavailable.")
 
 
 class FakeResponsesClient:
@@ -94,9 +104,12 @@ class AiTransformationApiTests(APITestCase):
 
     def test_generates_plan_without_sending_dataset_values(self):
         provider = SpyAiTransformProvider()
-        with patch(
-            "datasets.services.ai_transformations.get_ai_transform_provider",
-            return_value=provider,
+        with (
+            patch.dict(os.environ, {"AI_PROVIDER": "gemini"}),
+            patch(
+                "datasets.services.ai_transformations.get_ai_transform_provider",
+                return_value=provider,
+            ),
         ):
             response = self.client.post(
                 f"{self.base_url}/generate/",
@@ -202,6 +215,32 @@ class AiTransformationApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["affected_rows"], 3)
         self.assertEqual(response.data["preview"][0]["after"], "NSW")
+
+    def test_auto_uses_simple_built_in_plan_before_external_provider(self):
+        with patch.dict(
+            os.environ,
+            {
+                "AI_PROVIDER": "auto",
+                "GEMINI_API_KEY": "configured",
+                "OPENAI_API_KEY": "",
+            },
+        ), patch(
+            "datasets.services.ai_transformations.get_ai_transform_provider",
+            return_value=FailingAiTransformProvider(),
+        ):
+            response = self.client.post(
+                f"{self.base_url}/generate/",
+                {
+                    "operation": "standardize_categories",
+                    "instruction": "Use Australian state abbreviations",
+                    "column": "state",
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["provider"], "built-in")
+        self.assertEqual(response.data["data_rows_sent"], 0)
 
     def test_applies_category_standardization_and_exports_result(self):
         response = self.client.post(

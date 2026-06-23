@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import tempfile
 from types import SimpleNamespace
@@ -12,6 +13,7 @@ from rest_framework.test import APITestCase
 from datasets.services.regex_generation import (
     GeminiRegexProvider,
     OpenAIRegexProvider,
+    ProposalGenerationError,
     RegexProposal,
     TemplateRegexProvider,
 )
@@ -33,6 +35,14 @@ class SpyRegexProvider:
             negative_examples=["Abc"],
             confidence=0.9,
         )
+
+
+class FailingRegexProvider:
+    name = "gemini"
+    model = "test-model"
+
+    def generate(self, instruction, column_names):
+        raise ProposalGenerationError("External provider is temporarily unavailable.")
 
 
 class FakeResponsesClient:
@@ -171,6 +181,96 @@ class RegexGenerationApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["provider"], "built-in")
         self.assertIn("@", response.data["positive_examples"][0])
+
+    def test_auto_uses_simple_built_in_pattern_before_external_provider(self):
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AI_PROVIDER": "auto",
+                    "GEMINI_API_KEY": "configured",
+                    "OPENAI_API_KEY": "",
+                },
+            ),
+            patch(
+                "datasets.services.regex_generation.get_regex_provider",
+                return_value=FailingRegexProvider(),
+            ),
+        ):
+            response = self.client.post(
+                self.url,
+                {"instruction": "Find email addresses", "columns": ["email"]},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["provider"], "built-in")
+        self.assertEqual(response.data["data_rows_sent"], 0)
+
+    def test_auto_uses_external_provider_for_refined_email_requests(self):
+        provider = SpyRegexProvider()
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AI_PROVIDER": "auto",
+                    "GEMINI_API_KEY": "configured",
+                    "OPENAI_API_KEY": "",
+                },
+            ),
+            patch(
+                "datasets.services.regex_generation.get_regex_provider",
+                return_value=provider,
+            ),
+        ):
+            response = self.client.post(
+                self.url,
+                {
+                    "instruction": "Find all emails that begin with a number",
+                    "columns": ["email"],
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["provider"], "spy")
+        self.assertEqual(
+            provider.calls,
+            [
+                {
+                    "instruction": "Find all emails that begin with a number",
+                    "column_names": ["email"],
+                }
+            ],
+        )
+
+    def test_auto_does_not_generic_fallback_when_refined_email_request_fails(self):
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "AI_PROVIDER": "auto",
+                    "GEMINI_API_KEY": "configured",
+                    "OPENAI_API_KEY": "",
+                },
+            ),
+            patch(
+                "datasets.services.regex_generation.get_regex_provider",
+                return_value=FailingRegexProvider(),
+            ),
+        ):
+            response = self.client.post(
+                self.url,
+                {
+                    "instruction": "Find all emails that begin with a number",
+                    "columns": ["email"],
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.data["code"], "generation_failed")
+        self.assertIn("External provider", response.data["message"])
 
     def test_rejects_non_text_column_before_provider_call(self):
         provider = SpyRegexProvider()

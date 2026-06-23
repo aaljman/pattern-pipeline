@@ -31,6 +31,10 @@ class ProposalGenerationError(RuntimeError):
     pass
 
 
+class BuiltInPatternNotFound(ProposalGenerationError):
+    pass
+
+
 class RegexProposal(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -139,6 +143,33 @@ class OpenAIRegexProvider:
 class TemplateRegexProvider:
     name = "built-in"
     model = "common-patterns-v1"
+    REFINED_INTENT_TERMS = (
+        "after",
+        "before",
+        "begin",
+        "begins",
+        "contain",
+        "contains",
+        "digit",
+        "digits",
+        "domain",
+        "end",
+        "ends",
+        "except",
+        "exclude",
+        "excluding",
+        "letter",
+        "letters",
+        "only",
+        "prefix",
+        "start",
+        "starts",
+        "suffix",
+        "that",
+        "where",
+        "which",
+        "whose",
+    )
 
     TEMPLATES = [
         (
@@ -188,11 +219,18 @@ class TemplateRegexProvider:
         ),
     ]
 
+    def has_refined_intent(self, lowered: str) -> bool:
+        return any(
+            re.search(rf"(?<!\w){re.escape(term)}(?!\w)", lowered)
+            for term in self.REFINED_INTENT_TERMS
+        )
+
     def generate(self, instruction: str, column_names: list[str]) -> RegexProposal:
         lowered = instruction.lower()
         matches = []
+        refined_intent = self.has_refined_intent(lowered)
         for keywords, proposal in self.TEMPLATES:
-            if any(
+            if not refined_intent and any(
                 re.search(rf"(?<!\w){re.escape(keyword)}(?:s|es)?(?!\w)", lowered)
                 for keyword in keywords
             ):
@@ -203,7 +241,7 @@ class TemplateRegexProvider:
             raise ProposalGenerationError(
                 "The request matches multiple built-in pattern types. Make it more specific."
             )
-        raise ProposalGenerationError(
+        raise BuiltInPatternNotFound(
             "No AI API key is configured and this request does not match a built-in pattern."
         )
 
@@ -220,6 +258,10 @@ def get_regex_provider() -> RegexProvider:
     return TemplateRegexProvider()
 
 
+def is_auto_mode() -> bool:
+    return os.environ.get("AI_PROVIDER", "auto").strip().lower() == "auto"
+
+
 def generate_regex_proposal(
     dataset: Dataset,
     instruction: str,
@@ -233,8 +275,23 @@ def generate_regex_proposal(
     if len(cleaned_instruction) > MAX_INSTRUCTION_LENGTH:
         raise ProposalGenerationError("Pattern descriptions must be 1,000 characters or fewer.")
 
-    selected_provider = provider or get_regex_provider()
-    proposal = selected_provider.generate(cleaned_instruction, columns)
+    if provider is None and is_auto_mode():
+        selected_provider = TemplateRegexProvider()
+        try:
+            proposal = selected_provider.generate(cleaned_instruction, columns)
+        except BuiltInPatternNotFound:
+            selected_provider = get_regex_provider()
+            try:
+                proposal = selected_provider.generate(cleaned_instruction, columns)
+            except ProposalGenerationError as external_exc:
+                selected_provider = TemplateRegexProvider()
+                try:
+                    proposal = selected_provider.generate(cleaned_instruction, columns)
+                except BuiltInPatternNotFound:
+                    raise external_exc
+    else:
+        selected_provider = provider or get_regex_provider()
+        proposal = selected_provider.generate(cleaned_instruction, columns)
     try:
         compiled = compile_pattern(proposal.pattern, proposal.flags)
     except TransformationValidationError as exc:
