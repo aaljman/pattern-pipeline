@@ -21,6 +21,25 @@ const dataset: Dataset = {
   created_at: "2026-06-21T09:00:00Z"
 };
 
+const mixedColumnsDataset: Dataset = {
+  ...dataset,
+  columns: [
+    { name: "customer_id", type: "text", missing_count: 0 },
+    { name: "name", type: "text", missing_count: 0 },
+    { name: "state", type: "text", missing_count: 0 },
+    { name: "email", type: "text", missing_count: 0 }
+  ],
+  text_columns: ["customer_id", "name", "state", "email"],
+  preview: [
+    {
+      customer_id: "C-001",
+      name: "Ada Lovelace",
+      state: "New South Wales",
+      email: "ada@example.com"
+    }
+  ]
+};
+
 const plan = {
   operation: "standardize_categories",
   column: "state",
@@ -77,6 +96,30 @@ function jsonResponse(payload: unknown, status = 200) {
 
 describe("OptionalTransforms", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it("chooses workflow-friendly source column defaults", async () => {
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false }, queries: { retry: false } }
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OptionalTransforms
+          dataset={mixedColumnsDataset}
+          onComplete={vi.fn()}
+          onPreview={vi.fn()}
+          onPreviewInvalidated={vi.fn()}
+        />
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByLabelText("Source column")).toHaveValue("state");
+
+    await user.click(screen.getByRole("button", { name: /Extract fields/ }));
+
+    expect(screen.getByLabelText("Source column")).toHaveValue("name");
+  });
 
   it("previews and applies a deterministic category plan", async () => {
     const user = userEvent.setup();

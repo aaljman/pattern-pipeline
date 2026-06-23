@@ -39,6 +39,24 @@ const operations: {
   }
 ];
 
+function preferredColumn(dataset: Dataset, operation: AiTransformOperation) {
+  const preferredTerms =
+    operation === "standardize_categories" ? ["state", "territory"] : ["name"];
+  const lowerByColumn = new Map(
+    dataset.text_columns.map((columnName) => [columnName, columnName.toLowerCase()])
+  );
+  return (
+    dataset.text_columns.find((columnName) =>
+      preferredTerms.includes(lowerByColumn.get(columnName) ?? "")
+    ) ??
+    dataset.text_columns.find((columnName) =>
+      preferredTerms.some((term) => lowerByColumn.get(columnName)?.includes(term))
+    ) ??
+    dataset.text_columns[0] ??
+    ""
+  );
+}
+
 export function OptionalTransforms({
   dataset,
   onComplete,
@@ -46,7 +64,7 @@ export function OptionalTransforms({
   onPreviewInvalidated
 }: OptionalTransformsProps) {
   const [operation, setOperation] = useState<AiTransformOperation>("standardize_categories");
-  const [column, setColumn] = useState(dataset.text_columns[0] ?? "");
+  const [column, setColumn] = useState(preferredColumn(dataset, "standardize_categories"));
   const [instruction, setInstruction] = useState("");
   const [parametersText, setParametersText] = useState("");
   const [plan, setPlan] = useState<AiTransformPlan>();
@@ -135,6 +153,7 @@ export function OptionalTransforms({
             key={item.value}
             onClick={() => {
               setOperation(item.value);
+              setColumn(preferredColumn(dataset, item.value));
               setInstruction("");
               invalidate();
             }}
